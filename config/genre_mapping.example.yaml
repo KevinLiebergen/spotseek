@@ -1,0 +1,21 @@
+# Copy this file to genre_mapping.yaml and adjust it to your real rekordbox folders.
+#
+# Keys in lowercase. The lookup first tries an exact match against the
+# genres/tags received, and if nothing matches it falls back to a partial
+# match (in case the tag is "melodic techno" and you only have "techno"
+# defined).
+#
+# The value is the EXACT name of the subfolder inside REKORDBOX_ROOT.
+
+tech house: House
+deep house: House
+house: House
+melodic techno: Techno
+techno: Techno
+trance: Trance
+uk garage: Bass
+dubstep: Bass
+drum and bass: Drum & Bass
+dnb: Drum & Bass
+hip hop: Hip-Hop
+rap: Hip-Hop
