@@ -34,13 +34,3 @@ def iter_new_liked_tracks(sp: spotipy.Spotify, seen_ids: set, page_size: int = 5
                 return
             yield track
         offset += page_size
-
-
-_artist_genre_cache: dict[str, list[str]] = {}
-
-
-def get_artist_genres(sp: spotipy.Spotify, artist_id: str) -> list[str]:
-    if artist_id not in _artist_genre_cache:
-        artist = sp.artist(artist_id)
-        _artist_genre_cache[artist_id] = artist.get("genres", [])
-    return _artist_genre_cache[artist_id]

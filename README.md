@@ -1,11 +1,9 @@
 # spotseek
 
 When the Windows machine running rekordbox boots up, it checks your new
-Spotify likes, searches for and downloads them over Soulseek, tries to
-infer the genre, and drops the file into the matching genre subfolder
-inside your rekordbox collection. rekordbox itself is NOT touched
-automatically: you open the app when you're about to prep a session and
-analyze the folders with new tracks.
+Spotify likes, searches for and downloads them over Soulseek, and leaves
+them in one folder as `Artist - Title.ext`. You decide by hand which
+rekordbox folder each track goes into; rekordbox itself is not touched.
 
 ## Architecture
 
@@ -13,8 +11,8 @@ analyze the folders with new tracks.
    Nicotine+ so search/download can be automated.
 2. **src/main.py**: the orchestrator. Compares your likes against a
    local record (`data/state.db`) to figure out which ones are new,
-   searches each one on slskd, downloads the best result, infers a
-   genre, and moves the file.
+   searches each one on slskd, downloads the best result, and moves it
+   to the top of the downloads folder with a clean name.
 3. **Windows Task Scheduler**: triggers `run_windows.bat` on logon.
 
 ## Prerequisites (to do yourself, on the Windows machine)
@@ -27,8 +25,6 @@ analyze the folders with new tracks.
   `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET`. Set the Redirect URI
   to the same value you use in `.env` (defaults to
   `http://127.0.0.1:8888/callback`).
-- (Optional) A Last.fm API key, free, for the genre fallback:
-  https://www.last.fm/api/account/create
 - Python 3.11+ installed on the Windows machine.
 
 ## Installation
@@ -39,12 +35,10 @@ python -m venv .venv
 pip install -r requirements.txt
 
 copy .env.example .env
-copy config\genre_mapping.example.yaml config\genre_mapping.yaml
 ```
 
-Edit `.env` with your credentials and the real path to your rekordbox
-collection (`REKORDBOX_ROOT`), and `config\genre_mapping.yaml` with the
-Spotify-genre -> your-folder-name mapping.
+Edit `.env` with your credentials and set `DOWNLOAD_DIR` to slskd's
+downloads folder (`directories.downloads` in `slskd.yml`).
 
 ## Spotify authorization (one time)
 
@@ -66,6 +60,25 @@ python -m src.main
 
 Check `data/spotseek.log` to see what it did with each new track.
 
+The **first run doesn't download anything**: it only records your current
+likes in `data/state.db`, so that from then on only new likes are
+downloaded. To also grab your most recent likes on that first run, pass
+`--backfill N`:
+
+```bat
+python -m src.main --backfill 20
+```
+
+## Which file gets picked
+
+Among all search results, spotseek prefers, in order: users with a free
+upload slot, files named "Extended Mix" / "Original Mix", files whose
+length is known, then `PREFERRED_FORMATS`, bitrate and a short queue.
+Files shorter than the Spotify track (a different edit), longer than 15
+minutes (usually a full DJ mix), or with a known bitrate below
+`MIN_BITRATE` (FLAC excepted) are skipped. Longer files are accepted on
+purpose: Spotify often only has the radio edit.
+
 ## Scheduling on Windows (Task Scheduler)
 
 1. Open "Task Scheduler".
@@ -77,22 +90,23 @@ Check `data/spotseek.log` to see what it did with each new track.
    search + download can take several minutes).
 5. If you also want slskd to start automatically, create a similar
    task pointing at the slskd executable, or install slskd as a
-   Windows service (natively supported).
+   Windows service (natively supported). spotseek waits up to 3 minutes
+   for slskd to log in to Soulseek before searching.
 
 ## Known limitations / things to verify on the real Windows box
 
-- **slskd API**: `src/slskd_client.py` is written against the
-  documented v0 API endpoints, but this can vary by installed version.
-  Before trusting it, compare it against your instance's Swagger
-  (`http://localhost:5030/swagger`) and adjust field names/endpoints if
-  needed. This can't be tested without a real slskd instance.
-- **Genre classification**: based on the genres Spotify assigns to the
-  artist (not the track) plus an optional fallback to Last.fm tags,
-  passed through your own mapping in `config/genre_mapping.yaml`.
-  Anything that doesn't match lands in the `Unclassified` folder —
-  check it occasionally and extend the mapping.
+- **slskd API**: `src/slskd_client.py` was checked against slskd 0.26.0.
+  If you upgrade slskd, compare it against your instance's Swagger
+  (`http://localhost:5030/swagger`, needs `feature.swagger: true`).
+- **slskd listen port**: on some Windows machines the default port
+  (50300) falls inside a range reserved by Hyper-V/WSL and slskd exits
+  with `ListenException`. Check with
+  `netsh interface ipv4 show excludedportrange protocol=tcp` and set
+  `soulseek.listen_port` to a free one (e.g. 2234).
+- **Failed tracks aren't retried**: a track marked `not_found` or
+  `download_failed` in `data/state.db` stays that way. Delete its row to
+  retry it.
 - **rekordbox**: import and analysis are intentionally not automated
   (rekordbox has no official API for that, and writing to its database
-  directly is fragile). The file just ends up in the right folder so
-  that when you open rekordbox, you select that folder and hit
-  analyze.
+  directly is fragile). Move the new files into your collection folders
+  and analyze them in rekordbox.

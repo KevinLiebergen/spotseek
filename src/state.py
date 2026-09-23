@@ -27,6 +27,16 @@ def get_seen_ids() -> set:
         return {row[0] for row in conn.execute("SELECT spotify_id FROM seen_tracks")}
 
 
+def mark_many(rows: list[tuple[str, str, str, str]]) -> None:
+    """Inserts (spotify_id, title, artist, status) rows, leaving existing ones alone."""
+    with closing(_connect()) as conn:
+        conn.executemany(
+            "INSERT OR IGNORE INTO seen_tracks (spotify_id, title, artist, status) VALUES (?, ?, ?, ?)",
+            rows,
+        )
+        conn.commit()
+
+
 def mark_processed(spotify_id: str, title: str, artist: str, status: str) -> None:
     with closing(_connect()) as conn:
         conn.execute(

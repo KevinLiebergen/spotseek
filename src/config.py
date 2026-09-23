@@ -28,15 +28,6 @@ SPOTIFY_TOKEN_CACHE = os.environ.get(
 SLSKD_URL = os.environ.get("SLSKD_URL", "http://localhost:5030")
 SLSKD_API_KEY = _require("SLSKD_API_KEY")
 
-LASTFM_API_KEY = os.environ.get("LASTFM_API_KEY", "")
-
-REKORDBOX_ROOT = Path(_require("REKORDBOX_ROOT"))
-UNCLASSIFIED_FOLDER = os.environ.get("UNCLASSIFIED_FOLDER", "Unclassified")
-
-GENRE_MAPPING_PATH = os.environ.get(
-    "GENRE_MAPPING_PATH", str(BASE_DIR / "config" / "genre_mapping.yaml")
-)
-
 STATE_DB_PATH = os.environ.get("STATE_DB_PATH", str(BASE_DIR / "data" / "state.db"))
 DOWNLOAD_DIR = Path(os.environ.get("DOWNLOAD_DIR", str(BASE_DIR / "data" / "downloads")))
 
