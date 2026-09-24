@@ -4,3 +4,4 @@ python-dotenv>=1.0.0
 yt-dlp>=2025.1.1
 mutagen>=1.47
 PyYAML>=6.0
+pyrekordbox>=0.4.4

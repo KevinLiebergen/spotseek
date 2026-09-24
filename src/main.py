@@ -255,9 +255,24 @@ def main() -> None:
             log.exception("Error processing '%s'", track.get("name") or track["id"])
 
 
+def sync_rekordbox() -> None:
+    """Brings the rekordbox collection and genre playlists in line with the
+    genre folders, if enabled and rekordbox is closed (see src/rekordbox.py)."""
+    if not (config.REKORDBOX_SYNC and config.COPY_TO_DIR):
+        return
+    from . import rekordbox  # needs pyrekordbox, only imported when enabled
+
+    try:
+        rekordbox.sync(list(genre.load_folders()))
+    except Exception:
+        log.exception("rekordbox sync failed; the collection wasn't changed")
+
+
 if __name__ == "__main__":
     try:
         main()
+        # Also after runs with nothing new: it picks up tracks you filed by hand.
+        sync_rekordbox()
     except Exception:
         # The scheduled task has no visible console: make sure it's in the log.
         log.exception("Run failed")

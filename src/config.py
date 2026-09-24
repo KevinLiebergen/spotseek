@@ -52,6 +52,11 @@ DISCOGS_TOKEN = os.environ.get("DISCOGS_TOKEN", "")
 SORT_BY_GENRE = os.environ.get("SORT_BY_GENRE", "true").lower() not in ("0", "false", "no")
 LASTFM_API_KEY = os.environ.get("LASTFM_API_KEY", "")
 
+# rekordbox: after each run, sync the collection with the genre folders
+# (see src/rekordbox.py). Only while rekordbox is closed.
+REKORDBOX_SYNC = os.environ.get("REKORDBOX_SYNC", "false").lower() in ("1", "true", "yes")
+REKORDBOX_PLAYLIST_FOLDER = os.environ.get("REKORDBOX_PLAYLIST_FOLDER", "my_music")
+
 # Tracks that weren't found or failed to download are retried on later runs
 # until they've been tried this many times.
 MAX_ATTEMPTS = int(os.environ.get("MAX_ATTEMPTS", "5"))

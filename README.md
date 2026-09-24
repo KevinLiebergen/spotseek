@@ -102,6 +102,28 @@ tracks in; `--proposals` also writes the disagreements to
 moves the SI ones. `sort_loose.py` files the tracks lying loose in
 `COPY_TO_DIR`. Every move is logged in `data/moves-log.txt`.
 
+## rekordbox sync (optional)
+
+With `REKORDBOX_SYNC=true`, after each run spotseek updates rekordbox's
+database (through pyrekordbox), as long as rekordbox is closed:
+
+- tracks whose file moved within `COPY_TO_DIR` are relocated (by unique
+  file name), keeping their cues and analysis;
+- every genre folder gets a playlist with the same name inside the
+  `REKORDBOX_PLAYLIST_FOLDER` playlist folder (renaming an old playlist
+  whose tracks mostly moved to that folder, or creating it);
+- each track is put in the playlist of its folder and taken out of the
+  other genre playlists;
+- files in the genre folders that aren't in the collection are added.
+
+`master.db` is backed up to `data/rekordbox-backups` before each write.
+To preview or run it by hand:
+
+```bat
+python scripts\rekordbox_sync.py --dry-run
+python scripts\rekordbox_sync.py
+```
+
 ## SoundCloud likes (optional)
 
 Set `SOUNDCLOUD_USER` in `.env` (the `user` in `soundcloud.com/user`)
@@ -169,7 +191,9 @@ exist, the track is marked not found and retried later.
   If slskd loses its Soulseek connection mid-run (e.g. the PC went to
   sleep), the run stops without marking the remaining tracks, and they're
   picked up next time. A slskd stuck in "Disconnecting" needs a restart.
-- **rekordbox**: import and analysis are intentionally not automated
-  (rekordbox has no official API for that, and writing to its database
-  directly is fragile). Move the new files into your collection folders
-  and analyze them in rekordbox.
+- **rekordbox analysis**: tracks are added to the collection, but only
+  rekordbox itself can analyze them (beatgrid, waveform). Select the genre
+  playlist in rekordbox and Analyze the new ones.
+- **rekordbox database**: writing it goes through pyrekordbox, which is
+  tested up to rekordbox 7.0.9 (this setup runs 7.2.18). Back up your
+  collection before enabling `REKORDBOX_SYNC`.
