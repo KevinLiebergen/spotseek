@@ -1,12 +1,22 @@
 import argparse
 import itertools
 import logging
+import logging.handlers
 import re
 import sys
 import time
 from pathlib import Path
 
-from . import config, genre, organizer, slskd_client, soundcloud_client, spotify_client, state
+from . import (
+    config,
+    duplicates,
+    genre,
+    organizer,
+    slskd_client,
+    soundcloud_client,
+    spotify_client,
+    state,
+)
 
 LOG_DIR = Path(config.STATE_DB_PATH).parent
 LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -16,7 +26,10 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler(LOG_DIR / "spotseek.log", encoding="utf-8"),
+        # At most ~20 MB: spotseek.log plus 3 rotated ones of 5 MB.
+        logging.handlers.RotatingFileHandler(
+            LOG_DIR / "spotseek.log", maxBytes=5_000_000, backupCount=3, encoding="utf-8"
+        ),
     ],
 )
 log = logging.getLogger("spotseek")
@@ -73,6 +86,13 @@ def process_track(track: dict) -> None:
         state.mark_processed(spotify_id, title, artist, "skipped_long")
         return
 
+    if config.SKIP_DUPLICATES:
+        existing = duplicates.find(artist, title)
+        if existing:
+            log.info("Already in your collection, not downloading: %s", existing)
+            state.mark_processed(spotify_id, title, artist, "duplicate")
+            return
+
     queries = search_queries(artist, title, track.get("artist_is_uploader", False))
     for query in queries:
         slskd_client.wait_until_ready()
@@ -114,6 +134,7 @@ def process_track(track: dict) -> None:
         target_dir = config.COPY_TO_DIR / folder if folder else config.COPY_TO_DIR
         copy_path = organizer.copy_to(final_path, target_dir, artist, title)
         log.info("Copied -> %s", copy_path)
+        duplicates.remember(copy_path, artist, title)
         if folder:
             state.mark_processed(spotify_id, title, artist, f"ok:{folder}")
 

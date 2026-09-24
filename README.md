@@ -186,11 +186,20 @@ exist, the track is marked not found and retried later.
   with `ListenException`. Check with
   `netsh interface ipv4 show excludedportrange protocol=tcp` and set
   `soulseek.listen_port` to a free one (e.g. 2234).
+- **Already owned tracks**: with `COPY_TO_DIR` set, a like you already
+  have anywhere in it (same main artist and title) isn't downloaded again.
+  Radio edits and original/extended mixes count as the same track; a remix
+  you don't have yet doesn't. Set `SKIP_DUPLICATES=false` to turn it off.
+- **slskd stuck**: if slskd isn't logged in to Soulseek after 90 seconds,
+  spotseek restarts it once through the `SLSKD_RESTART_TASK` scheduled task
+  (default "spotseek - slskd") and waits again.
+- **yt-dlp updates**: `run_windows.bat` upgrades yt-dlp before each run,
+  since SoundCloud changes often and old versions stop reading likes.
 - **Retries**: tracks that weren't found or failed to download are
   retried on later runs, up to `MAX_ATTEMPTS` times in total (default 5).
   If slskd loses its Soulseek connection mid-run (e.g. the PC went to
   sleep), the run stops without marking the remaining tracks, and they're
-  picked up next time. A slskd stuck in "Disconnecting" needs a restart.
+  picked up next time.
 - **rekordbox analysis**: tracks are added to the collection, but only
   rekordbox itself can analyze them (beatgrid, waveform). Select the genre
   playlist in rekordbox and Analyze the new ones.

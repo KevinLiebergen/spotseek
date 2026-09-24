@@ -30,6 +30,9 @@ SOUNDCLOUD_USER = os.environ.get("SOUNDCLOUD_USER", "")
 
 SLSKD_URL = os.environ.get("SLSKD_URL", "http://localhost:5030")
 SLSKD_API_KEY = _require("SLSKD_API_KEY")
+# Scheduled task that starts slskd, used to restart it when it's stuck
+# (e.g. after the PC slept). Empty: never restart it.
+SLSKD_RESTART_TASK = os.environ.get("SLSKD_RESTART_TASK", "spotseek - slskd")
 
 STATE_DB_PATH = os.environ.get("STATE_DB_PATH", str(BASE_DIR / "data" / "state.db"))
 DOWNLOAD_DIR = Path(os.environ.get("DOWNLOAD_DIR", str(BASE_DIR / "data" / "downloads")))
@@ -40,6 +43,9 @@ PREFERRED_FORMATS = [f.strip() for f in os.environ.get("PREFERRED_FORMATS", "fla
 MIN_BITRATE = int(os.environ.get("MIN_BITRATE", "256"))
 SEARCH_TIMEOUT_SECONDS = int(os.environ.get("SEARCH_TIMEOUT_SECONDS", "20"))
 DOWNLOAD_TIMEOUT_SECONDS = int(os.environ.get("DOWNLOAD_TIMEOUT_SECONDS", "600"))
+# Don't download likes you already have somewhere in COPY_TO_DIR.
+SKIP_DUPLICATES = os.environ.get("SKIP_DUPLICATES", "true").lower() not in ("0", "false", "no")
+
 # Genre classification (see config/genres.example.yaml). Both keys are
 # optional: Discogs is queried anyway (more slowly without a token), and
 # Last.fm only with a key.

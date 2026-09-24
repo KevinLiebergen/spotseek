@@ -4,7 +4,10 @@ Checked against slskd 0.26.0. If you upgrade slskd and something breaks,
 compare against the Swagger UI of your instance
 (http://localhost:5030/swagger, needs `feature.swagger: true`).
 """
+import logging
+import os
 import re
+import subprocess
 import time
 from pathlib import Path, PureWindowsPath
 from urllib.parse import quote
@@ -12,6 +15,8 @@ from urllib.parse import quote
 import requests
 
 from . import config
+
+log = logging.getLogger("spotseek")
 
 # Spotify often only has the radio edit while Soulseek has the original or
 # extended mix, so longer files are fine. Shorter ones are a different edit,
@@ -55,20 +60,55 @@ def _get(path: str):
     return resp.json()
 
 
+_restarted = False
+
+
+def _wait_logged_in(timeout: int) -> tuple[bool, str]:
+    deadline = time.time() + timeout
+    state = "unreachable"
+    while True:
+        try:
+            state = _get("/application")["server"]["state"]
+            if "LoggedIn" in state:
+                return True, state
+        except requests.RequestException:
+            state = "unreachable"
+        if time.time() >= deadline:
+            return False, state
+        time.sleep(5)
+
+
+def restart() -> None:
+    """Kills slskd and starts it again through its scheduled task."""
+    subprocess.run(["taskkill", "/IM", "slskd.exe", "/F"], capture_output=True)
+    time.sleep(3)
+    subprocess.run(
+        ["schtasks", "/Run", "/TN", config.SLSKD_RESTART_TASK], capture_output=True, check=True
+    )
+
+
 def wait_until_ready(timeout: int = 180) -> None:
     """Blocks until slskd is logged in to the Soulseek server. Right after
-    Windows logon slskd may still be starting up or connecting."""
-    deadline = time.time() + timeout
-    last_state = "unreachable"
-    while time.time() < deadline:
+    Windows logon slskd may still be starting up or connecting. If it
+    doesn't get there (e.g. stuck in "Disconnecting" after the PC slept),
+    restarts it once per run through its scheduled task."""
+    global _restarted
+    can_restart = bool(config.SLSKD_RESTART_TASK) and os.name == "nt" and not _restarted
+    ready, state = _wait_logged_in(90 if can_restart else timeout)
+    if ready:
+        return
+    if can_restart:
+        _restarted = True
+        log.warning("slskd not logged in (%s): restarting it", state)
         try:
-            last_state = _get("/application")["server"]["state"]
-            if "LoggedIn" in last_state:
-                return
-        except requests.RequestException:
-            last_state = "unreachable"
-        time.sleep(5)
-    raise SlskdError(f"slskd is not logged in to Soulseek (last state: {last_state})")
+            restart()
+        except (OSError, subprocess.CalledProcessError) as e:
+            raise SlskdError(f"slskd is not logged in ({state}) and couldn't be restarted: {e}")
+        ready, state = _wait_logged_in(timeout)
+        if ready:
+            log.info("slskd is back after the restart")
+            return
+    raise SlskdError(f"slskd is not logged in to Soulseek (last state: {state})")
 
 
 def search(query: str, timeout: int | None = None) -> list[dict]:

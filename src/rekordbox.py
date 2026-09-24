@@ -89,6 +89,7 @@ def plan_sync(db, genre_folders: list[str]) -> SyncPlan:
     # 1. Relocate tracks whose file is gone but exists, uniquely named, in root.
     contents = list(db.get_content())
     current_path = {}  # content ID -> Path it will have
+    unresolved_names = set()  # file names of tracks that couldn't be relocated
     for c in contents:
         path = c.FolderPath or ""
         if path.startswith("spotify:") or not path:
@@ -102,6 +103,7 @@ def plan_sync(db, genre_folders: list[str]) -> SyncPlan:
             current_path[c.ID] = matches[0]
         elif len(matches) > 1:
             plan.ambiguous.append(f"{c.FileNameL}: {len(matches)} files with that name")
+            unresolved_names.add(matches[0].name.lower())
 
     # 2. One playlist per genre folder inside the playlist folder.
     parent = db.get_playlist(Name=config.REKORDBOX_PLAYLIST_FOLDER, Attribute=1).first()
@@ -144,11 +146,17 @@ def plan_sync(db, genre_folders: list[str]) -> SyncPlan:
                 if actual and actual != folder:
                     plan.remove_from_playlist.append((playlist, song))
 
-    # 4. Files in genre folders that rekordbox doesn't know yet.
+    # 4. Files in genre folders that rekordbox doesn't know yet. A file named
+    # like a track that couldn't be relocated (several files with its name)
+    # is probably that track: adding it would create a duplicate entry
+    # without its cues, so it's left for you to relocate in rekordbox.
     for folder in genre_folders:
         for p in (root / folder).rglob("*"):
             if p.suffix.lower() in AUDIO_EXTENSIONS and p.is_file() and _norm(p) not in known_paths:
-                plan.new_tracks.append((folder, p))
+                if p.name.lower() in unresolved_names:
+                    plan.ambiguous.append(f"{p.name}: not added, relocate the existing entry by hand")
+                else:
+                    plan.new_tracks.append((folder, p))
     return plan
 
 
