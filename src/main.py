@@ -6,7 +6,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import config, organizer, slskd_client, soundcloud_client, spotify_client, state
+from . import config, genre, organizer, slskd_client, soundcloud_client, spotify_client, state
 
 LOG_DIR = Path(config.STATE_DB_PATH).parent
 LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -110,8 +110,35 @@ def process_track(track: dict) -> None:
     state.mark_processed(spotify_id, title, artist, "ok")
 
     if config.COPY_TO_DIR:
-        copy_path = organizer.copy_to(final_path, config.COPY_TO_DIR, artist, title)
+        folder = _genre_folder(final_path, artist, title)
+        target_dir = config.COPY_TO_DIR / folder if folder else config.COPY_TO_DIR
+        copy_path = organizer.copy_to(final_path, target_dir, artist, title)
         log.info("Copied -> %s", copy_path)
+        if folder:
+            state.mark_processed(spotify_id, title, artist, f"ok:{folder}")
+
+
+def _genre_folder(path: Path, artist: str, title: str) -> str | None:
+    """The genre subfolder of COPY_TO_DIR to file the track in, or None to
+    leave it at the top for you to file by hand."""
+    if not config.SORT_BY_GENRE or not Path(config.GENRES_CONFIG_PATH).is_file():
+        return None
+    try:
+        result = genre.classify(path, artist, title)
+    except Exception:
+        log.exception("Genre classification failed for %s - %s", artist, title)
+        return None
+
+    why = "; ".join(result.evidence) or "no genre info"
+    if not result.folder:
+        top = ", ".join(f"{f} {s}" for f, s in list(result.scores.items())[:2]) or "-"
+        log.info("Genre unclear (%s), left for you to file: %s", top, why)
+        return None
+    if not (config.COPY_TO_DIR / result.folder).is_dir():
+        log.warning("Genre folder %s doesn't exist, left for you to file", result.folder)
+        return None
+    log.info("Genre: %s (%s)", result.folder, why)
+    return result.folder
 
 
 def _baseline(tracks: list[dict]) -> None:

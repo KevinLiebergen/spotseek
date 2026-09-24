@@ -40,6 +40,18 @@ PREFERRED_FORMATS = [f.strip() for f in os.environ.get("PREFERRED_FORMATS", "fla
 MIN_BITRATE = int(os.environ.get("MIN_BITRATE", "256"))
 SEARCH_TIMEOUT_SECONDS = int(os.environ.get("SEARCH_TIMEOUT_SECONDS", "20"))
 DOWNLOAD_TIMEOUT_SECONDS = int(os.environ.get("DOWNLOAD_TIMEOUT_SECONDS", "600"))
+# Genre classification (see config/genres.example.yaml). Both keys are
+# optional: Discogs is queried anyway (more slowly without a token), and
+# Last.fm only with a key.
+GENRES_CONFIG_PATH = os.environ.get(
+    "GENRES_CONFIG_PATH", str(BASE_DIR / "config" / "genres.yaml")
+)
+DISCOGS_TOKEN = os.environ.get("DISCOGS_TOKEN", "")
+# Copy each download into its genre subfolder of COPY_TO_DIR when the
+# classifier is confident (unclear ones go to COPY_TO_DIR itself).
+SORT_BY_GENRE = os.environ.get("SORT_BY_GENRE", "true").lower() not in ("0", "false", "no")
+LASTFM_API_KEY = os.environ.get("LASTFM_API_KEY", "")
+
 # Tracks that weren't found or failed to download are retried on later runs
 # until they've been tried this many times.
 MAX_ATTEMPTS = int(os.environ.get("MAX_ATTEMPTS", "5"))

@@ -1,0 +1,78 @@
+# Copy this file to config/genres.yaml and adapt it to your own folders.
+#
+# Each key is the EXACT name of a subfolder of COPY_TO_DIR (quote it: it
+# starts with "["). Under it:
+#   genres:  genre/style names that point to this folder. They're matched,
+#            ignoring case and accents, against the genre tag inside the file
+#            and the styles Discogs gives for the release. The longest match
+#            wins, so "latin tech house" beats "tech house".
+#   bpm:     optional [min, max], or a list of them. Picks between folders that share a genre
+#            ("techno" goes to PEAK TIME or HARD TECHNO by tempo) and rules a
+#            folder out when the file's BPM is clearly outside it.
+#   spanish: optional true/false. Picks between folders that share a genre by
+#            the track's language ("rap" goes to HIP HOP or RAP ESPAÑOL). The
+#            language is guessed from Discogs release countries and the words
+#            in the artist and title; when it can't be told, the track stays
+#            unclassified.
+#
+# Generic genres like "house" or "latin" count less than specific ones like
+# "tech house": list them anyway so they can win when nothing else does.
+
+"[01] TECH HOUSE":
+  genres: [tech house, bass house, minimal tech house]
+  bpm: [122, 134]
+
+"[02] LATIN & AFRO TECH":
+  genres: [latin tech house, brazilian tech house, afro house, afro tech, tribal house, latin house]
+  bpm: [118, 132]
+
+"[03] MINIMAL & DEEP TECH":
+  genres: [minimal / deep tech, deep tech, minimal, rominimal, microhouse, minimal house]
+  bpm: [118, 132]
+
+"[04] DEEP & MELODIC":
+  genres: [deep house, organic house, melodic house, melodic techno, melodic house & techno, progressive house]
+  bpm: [110, 128]
+
+"[05] HOUSE":
+  genres: [house, funky house, jackin house, funky / groove / jackin house, classic house, vocal house, soulful house, garage house, uk garage, chicago house]
+  bpm: [115, 132]
+
+"[06] DISCO & NU DISCO":
+  genres: [disco, nu disco, nu-disco, nu disco / disco, italo disco, disco house, disco house & nu-disco, indie dance, funk, boogie]
+
+# Plain "techno" is listed in both techno folders: tempo decides, and in the
+# overlap (140-141 BPM) the track stays unclassified.
+"[07] PEAK TIME & RAW TECHNO":
+  genres: [techno, peak time techno, driving techno, raw techno, hypnotic techno, deep techno, minimal techno, dub techno, techno (peak time / driving), techno (raw / deep / hypnotic)]
+  bpm: [124, 141]
+
+"[08] HARD TECHNO & HARDGROOVE":
+  genres: [hard techno, hardgroove, hard groove, industrial techno, schranz, rave, hard dance, bouncy techno, techno]
+  bpm: [140, 170]
+
+# No BPM for rap: tempos run from 70 to 140+ and BPM tags are often doubled
+# or halved, so tempo says nothing about whether a track is rap.
+"[09] HIP HOP":
+  genres: [hip hop, hip-hop, rap, trap, boom bap, gangsta, conscious, east coast, west coast, r&b]
+  spanish: false
+
+"[10] RAP ESPAÑOL":
+  genres: [hip hop, hip-hop, rap, trap, boom bap, rap espanol, spanish hip hop, hip hop espanol, rap en espanol]
+  spanish: true
+
+"[11] REGGAETON & LATIN URBAN":
+  # "latin pop" is in both this folder and FIESTA ESPAÑOLA: Discogs uses it for
+  # Chayanne and for commercial dembow alike, so other signals have to decide.
+  genres: [reggaeton, dembow, perreo, moombahton, trap latino, latin trap, urbano latino, latin, latin pop]
+
+# Spanish party pop and rock (verbena): El Canto del Loco, Melendi, Estopa,
+# Chayanne. Only Spanish-language tracks, so English rock stays out.
+"[12] FIESTA ESPAÑOLA":
+  genres: [pop rock, rock, spanish rock, rock espanol, pop espanol, spanish pop, latin pop, pop latino, rumba, rumba catalana, flamenco pop, flamenco, europop, pasodoble, verbena, cancion espanola]
+  spanish: true
+
+# Festival / big room: Axwell, Swedish House Mafia, Avicii. "progressive house"
+# is shared with DEEP & MELODIC (Discogs uses it for both sounds).
+"[13] EDM":
+  genres: [edm, big room, electro house, progressive house, future house, dutch house, complextro, festival]

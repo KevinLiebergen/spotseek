@@ -1,5 +1,6 @@
 import re
 import shutil
+from datetime import datetime
 from pathlib import Path
 
 from . import config
@@ -37,6 +38,24 @@ def tidy_download(downloaded_path: Path, artist: str, title: str) -> Path:
             pass
 
     return target_path
+
+
+MOVES_LOG_PATH = Path(config.STATE_DB_PATH).parent / "moves-log.txt"
+
+
+def move_to_genre(path: Path, folder: str) -> Path:
+    """Moves a track into COPY_TO_DIR/<folder>, keeping its name (adding
+    " (2)" if taken), and logs the move so it can be undone."""
+    target_dir = config.COPY_TO_DIR / folder
+    target = target_dir / path.name
+    counter = 2
+    while target.exists():
+        target = target_dir / f"{path.stem} ({counter}){path.suffix}"
+        counter += 1
+    shutil.move(str(path), str(target))
+    with open(MOVES_LOG_PATH, "a", encoding="utf-8") as log:
+        log.write(f"{datetime.now():%Y-%m-%d %H:%M} | {path} -> {target}\n")
+    return target
 
 
 def copy_to(path: Path, target_dir: Path, artist: str, title: str) -> Path:

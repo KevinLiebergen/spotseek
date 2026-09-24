@@ -72,6 +72,36 @@ downloaded. To also grab your most recent likes on that first run, pass
 python -m src.main --backfill 20
 ```
 
+## Genre sorting (optional)
+
+With `COPY_TO_DIR` set and `config/genres.yaml` in place (copy
+`config/genres.example.yaml` and adapt it to your folders), each download
+is copied into its genre subfolder, e.g. `my_music\[01] TECH HOUSE`, when
+the classifier is confident, and to `COPY_TO_DIR` itself when it isn't, for
+you to file by hand. `data/spotseek.log` says where each track went and
+why. The classifier (`src/genre.py`) combines:
+
+- the genre and BPM tags inside the file;
+- Discogs styles of releases by the same artist (`DISCOGS_TOKEN`);
+- Last.fm tags of the track or, usually, its artist (`LASTFM_API_KEY`);
+- the folder where you already filed other tracks by that artist;
+- a Spanish-language guess, for folders split by language.
+
+To check it against your own collection before trusting it:
+
+```bat
+python scripts\genre_report.py --evaluate
+python scripts\genre_report.py --evaluate --proposals
+python scripts\apply_proposals.py
+python scripts\sort_loose.py --dry-run
+```
+
+`--evaluate` compares its proposals with the folders you already filed
+tracks in; `--proposals` also writes the disagreements to
+`data/propuestas.txt`, where you mark SI/NO, and `apply_proposals.py`
+moves the SI ones. `sort_loose.py` files the tracks lying loose in
+`COPY_TO_DIR`. Every move is logged in `data/moves-log.txt`.
+
 ## SoundCloud likes (optional)
 
 Set `SOUNDCLOUD_USER` in `.env` (the `user` in `soundcloud.com/user`)
