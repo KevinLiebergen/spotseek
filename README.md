@@ -1,7 +1,8 @@
 # spotseek
 
 When the Windows machine running rekordbox boots up, it checks your new
-Spotify likes, searches for and downloads them over Soulseek, and leaves
+Spotify (and optionally SoundCloud) likes, searches for and downloads
+them over Soulseek, and leaves
 them in one folder as `Artist - Title.ext`. You decide by hand which
 rekordbox folder each track goes into; rekordbox itself is not touched.
 
@@ -38,7 +39,9 @@ copy .env.example .env
 ```
 
 Edit `.env` with your credentials and set `DOWNLOAD_DIR` to slskd's
-downloads folder (`directories.downloads` in `slskd.yml`).
+downloads folder (`directories.downloads` in `slskd.yml`). Optionally set
+`COPY_TO_DIR` (e.g. your rekordbox collection folder) to also get a copy
+of every finished track there.
 
 ## Spotify authorization (one time)
 
@@ -69,7 +72,28 @@ downloaded. To also grab your most recent likes on that first run, pass
 python -m src.main --backfill 20
 ```
 
+## SoundCloud likes (optional)
+
+Set `SOUNDCLOUD_USER` in `.env` (the `user` in `soundcloud.com/user`)
+and your SoundCloud likes are handled like Spotify ones: listed with
+yt-dlp (no API key; your likes must be public), searched and downloaded
+from Soulseek, never from SoundCloud itself. Its first run also just
+records your existing likes. Liked playlists are ignored, and anything
+longer than 15 minutes (DJ sets, radio shows) is skipped. Expect more
+"not found" than with Spotify: many SoundCloud edits and bootlegs only
+exist there.
+
+SoundCloud titles have no separate artist field, so spotseek splits
+"Artist - Title" and strips "[Free DL]"-style noise. When a title
+doesn't follow that pattern, the uploader is used as the artist and the
+title alone is also tried.
+
 ## Which file gets picked
+
+Soulseek only returns files whose path contains every word of the query,
+so if the exact "Artist Title" search finds nothing, spotseek retries
+with simpler versions: without "(feat. ...)" or "- Radio Edit"-style
+suffixes, without anything in parentheses, and without punctuation.
 
 Among all search results, spotseek prefers, in order: users with a free
 upload slot, files named "Extended Mix" / "Original Mix", files whose
@@ -78,6 +102,13 @@ Files shorter than the Spotify track (a different edit), longer than 15
 minutes (usually a full DJ mix), or with a known bitrate below
 `MIN_BITRATE` (FLAC excepted) are skipped. Longer files are accepted on
 purpose: Spotify often only has the radio edit.
+
+Files that look like a different version are skipped too: a remix or
+edit the title doesn't mention ("Wings [Krakota Remix]" for "Wings"), or,
+when the title is a remix or edit, a file that doesn't name its author
+("La Linea (Original Mix)" for "La Linea (Toth Edit)"). Radio edits and
+original/extended mixes count as the same track. If only other versions
+exist, the track is marked not found and retried later.
 
 ## Scheduling on Windows (Task Scheduler)
 
@@ -103,9 +134,11 @@ purpose: Spotify often only has the radio edit.
   with `ListenException`. Check with
   `netsh interface ipv4 show excludedportrange protocol=tcp` and set
   `soulseek.listen_port` to a free one (e.g. 2234).
-- **Failed tracks aren't retried**: a track marked `not_found` or
-  `download_failed` in `data/state.db` stays that way. Delete its row to
-  retry it.
+- **Retries**: tracks that weren't found or failed to download are
+  retried on later runs, up to `MAX_ATTEMPTS` times in total (default 5).
+  If slskd loses its Soulseek connection mid-run (e.g. the PC went to
+  sleep), the run stops without marking the remaining tracks, and they're
+  picked up next time. A slskd stuck in "Disconnecting" needs a restart.
 - **rekordbox**: import and analysis are intentionally not automated
   (rekordbox has no official API for that, and writing to its database
   directly is fragile). Move the new files into your collection folders

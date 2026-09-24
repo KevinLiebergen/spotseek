@@ -4,6 +4,7 @@ Checked against slskd 0.26.0. If you upgrade slskd and something breaks,
 compare against the Swagger UI of your instance
 (http://localhost:5030/swagger, needs `feature.swagger: true`).
 """
+import re
 import time
 from pathlib import Path, PureWindowsPath
 from urllib.parse import quote
@@ -18,6 +19,22 @@ from . import config
 DURATION_TOLERANCE_SECONDS = 5
 MAX_LENGTH_SECONDS = 15 * 60
 PREFERRED_VERSIONS = ("extended mix", "original mix", "extended")
+# Words naming a different version of a track (a remix of it, an edit...).
+_VERSION_TAGS = re.compile(
+    r"\b(remix|rmx|bootleg|edit|rework|flip|vip|dub|mashup|acapella|instrumental)\b",
+    re.IGNORECASE,
+)
+_NOT_REMIXER_WORDS = {
+    "remix", "rmx", "bootleg", "edit", "rework", "flip", "vip", "dub", "mashup",
+    "acapella", "instrumental", "mix", "extended", "original", "radio", "club",
+    "the", "and", "feat", "ft",
+}
+# "- Radio Edit", "(Original Mix)"...: the same track as the original, just
+# shorter or longer, so they don't count as a different version.
+VERSION_SUFFIX = re.compile(
+    r"\s*(-\s*|[(\[]\s*)(radio edit|radio mix|edit|original mix|extended mix|extended)\s*[)\]]?\s*$",
+    re.IGNORECASE,
+)
 
 
 class SlskdError(RuntimeError):
@@ -63,16 +80,28 @@ def search(query: str, timeout: int | None = None) -> list[dict]:
         json={"searchText": query},
         timeout=15,
     )
+    if resp.status_code == 409:
+        # slskd lost its Soulseek connection (e.g. after the PC slept).
+        raise SlskdError(f"slskd can't search right now: {resp.text}")
     resp.raise_for_status()
     search_id = resp.json()["id"]
 
+    if not _wait_for_search(search_id, timeout):
+        # Popular tracks keep getting responses past the timeout, and slskd
+        # only returns them once the search is complete: stop it first.
+        requests.put(f"{_base()}/api/v0/searches/{search_id}", headers=_headers(), timeout=15)
+        _wait_for_search(search_id, 15)
+
+    return _get(f"/searches/{search_id}/responses")
+
+
+def _wait_for_search(search_id: str, timeout: int) -> bool:
     deadline = time.time() + timeout
     while time.time() < deadline:
         if _get(f"/searches/{search_id}").get("isComplete"):
-            break
+            return True
         time.sleep(1)
-
-    return _get(f"/searches/{search_id}/responses")
+    return False
 
 
 def _format_rank(filename: str) -> int:
@@ -101,13 +130,45 @@ def _bitrate(file_info: dict) -> int:
     return 0
 
 
-def pick_best_file(responses: list[dict], duration_seconds: float | None = None):
+def _remixer_words(title: str) -> set[str]:
+    """Words naming who made the version: "Toth" in "(Toth Edit)", "tony
+    romera" in "- Tony Romera Remix"."""
+    segments = re.findall(r"[(\[]([^)\]]*)[)\]]", title)
+    if " - " in title:
+        segments.append(title.split(" - ", 1)[1])
+    words = set()
+    for segment in segments:
+        if _VERSION_TAGS.search(segment):
+            words |= set(re.findall(r"\w+", segment.lower())) - _NOT_REMIXER_WORDS
+    return words
+
+
+def _is_other_version(file_name: str, title: str) -> bool:
+    """True when the file looks like a different version than the track:
+    "Wings [Krakota Remix]" for "Wings", or "La Linea (Original Mix)" for
+    "La Linea (Toth Edit)". Plain radio edits count as the original."""
+    title = VERSION_SUFFIX.sub("", title)
+    file_tags = {t.lower() for t in _VERSION_TAGS.findall(file_name)}
+    remixers = _remixer_words(title)
+    if remixers:
+        return not remixers <= set(re.findall(r"\w+", file_name.lower()))
+    title_tags = {t.lower() for t in _VERSION_TAGS.findall(title)}
+    if title_tags:
+        return not title_tags <= file_tags
+    return bool(file_tags)
+
+
+def pick_best_file(
+    responses: list[dict], duration_seconds: float | None = None, title: str = ""
+):
     """Picks the best file across all search responses. Prefers users with a
     free upload slot (so the download starts right away), then extended or
     original mixes, then files whose length could be checked, then the
-    preferred format, then bitrate and a short queue. Files shorter than the
-    Spotify duration (a different edit) or with a known bitrate below
-    MIN_BITRATE are discarded."""
+    preferred format, then bitrate and a short queue. Discards files that
+    look like a different version of the track (a remix the title doesn't
+    mention, or the original when the title is a remix), files shorter than
+    the track (a different edit), and files with a known bitrate below
+    MIN_BITRATE."""
     candidates = []
     for response in responses:
         username = response.get("username")
@@ -120,9 +181,12 @@ def pick_best_file(responses: list[dict], duration_seconds: float | None = None)
                 continue
             if not _duration_matches(file_info, duration_seconds):
                 continue
+            file_name = PureWindowsPath(filename).name
+            if _is_other_version(file_name, title):
+                continue
             score = (
                 bool(response.get("hasFreeUploadSlot")),
-                any(v in PureWindowsPath(filename).name for v in PREFERRED_VERSIONS),
+                any(v in file_name for v in PREFERRED_VERSIONS),
                 bool(file_info.get("length")),  # duration verified
                 _format_rank(filename),
                 bitrate,

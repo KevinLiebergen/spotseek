@@ -25,13 +25,21 @@ SPOTIFY_TOKEN_CACHE = os.environ.get(
     "SPOTIFY_TOKEN_CACHE", str(BASE_DIR / "data" / ".spotify-token-cache")
 )
 
+# Optional: also download SoundCloud likes (the "user" in soundcloud.com/user).
+SOUNDCLOUD_USER = os.environ.get("SOUNDCLOUD_USER", "")
+
 SLSKD_URL = os.environ.get("SLSKD_URL", "http://localhost:5030")
 SLSKD_API_KEY = _require("SLSKD_API_KEY")
 
 STATE_DB_PATH = os.environ.get("STATE_DB_PATH", str(BASE_DIR / "data" / "state.db"))
 DOWNLOAD_DIR = Path(os.environ.get("DOWNLOAD_DIR", str(BASE_DIR / "data" / "downloads")))
+# Optional: every finished track is also copied here (e.g. your rekordbox collection).
+COPY_TO_DIR = Path(os.environ["COPY_TO_DIR"]) if os.environ.get("COPY_TO_DIR") else None
 
 PREFERRED_FORMATS = [f.strip() for f in os.environ.get("PREFERRED_FORMATS", "flac,mp3").split(",")]
 MIN_BITRATE = int(os.environ.get("MIN_BITRATE", "256"))
 SEARCH_TIMEOUT_SECONDS = int(os.environ.get("SEARCH_TIMEOUT_SECONDS", "20"))
 DOWNLOAD_TIMEOUT_SECONDS = int(os.environ.get("DOWNLOAD_TIMEOUT_SECONDS", "600"))
+# Tracks that weren't found or failed to download are retried on later runs
+# until they've been tried this many times.
+MAX_ATTEMPTS = int(os.environ.get("MAX_ATTEMPTS", "5"))
