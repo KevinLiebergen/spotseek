@@ -1,6 +1,8 @@
 @echo off
 REM Entry point for the Windows scheduled task.
-REM Adjust the path below if the project doesn't live in this folder.
 cd /d "%~dp0"
 call .venv\Scripts\activate.bat
-python -m src.main
+REM Runs hidden: errors go to data\task-output.log, the rest to data\spotseek.log.
+if not exist data mkdir data
+set PYTHONIOENCODING=utf-8
+python -m src.main > nul 2>> data\task-output.log

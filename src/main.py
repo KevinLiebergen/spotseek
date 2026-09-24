@@ -148,6 +148,18 @@ def _load(sp, track: dict) -> dict:
     return track
 
 
+def _with_retries(what: str, fn, attempts: int = 6, delay: int = 60):
+    """Right after logon the network may not be up yet: retry for a few minutes."""
+    for attempt in range(1, attempts + 1):
+        try:
+            return fn()
+        except Exception as e:
+            if attempt == attempts:
+                raise
+            log.warning("Failed %s (%s), retrying in %ds", what, e, delay)
+            time.sleep(delay)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Download new Spotify/SoundCloud likes via Soulseek.")
     parser.add_argument(
@@ -168,7 +180,10 @@ def main() -> None:
     spotify_first_run = not any(not _is_soundcloud(i) for i in seen_ids)
     new_tracks = _new_likes(
         "Spotify",
-        list(spotify_client.iter_new_liked_tracks(sp, seen_ids)),
+        _with_retries(
+            "reading Spotify likes",
+            lambda: list(spotify_client.iter_new_liked_tracks(sp, seen_ids)),
+        ),
         spotify_first_run,
         args.backfill,
     )
@@ -177,7 +192,10 @@ def main() -> None:
     if config.SOUNDCLOUD_USER:
         soundcloud_first_run = not any(_is_soundcloud(i) for i in seen_ids)
         try:
-            soundcloud_tracks = list(soundcloud_client.iter_new_liked_tracks(seen_ids))
+            soundcloud_tracks = _with_retries(
+                "reading SoundCloud likes",
+                lambda: list(soundcloud_client.iter_new_liked_tracks(seen_ids)),
+            )
         except Exception:
             log.exception("Couldn't read SoundCloud likes of '%s'", config.SOUNDCLOUD_USER)
         else:
@@ -211,4 +229,9 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        # The scheduled task has no visible console: make sure it's in the log.
+        log.exception("Run failed")
+        raise
