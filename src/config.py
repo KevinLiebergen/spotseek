@@ -43,6 +43,9 @@ PREFERRED_FORMATS = [f.strip() for f in os.environ.get("PREFERRED_FORMATS", "fla
 MIN_BITRATE = int(os.environ.get("MIN_BITRATE", "256"))
 SEARCH_TIMEOUT_SECONDS = int(os.environ.get("SEARCH_TIMEOUT_SECONDS", "20"))
 DOWNLOAD_TIMEOUT_SECONDS = int(os.environ.get("DOWNLOAD_TIMEOUT_SECONDS", "600"))
+# Give up on a user (and try the next one) when this many downloads are
+# queued ahead of ours: it wouldn't start before DOWNLOAD_TIMEOUT_SECONDS.
+MAX_QUEUE_POSITION = int(os.environ.get("MAX_QUEUE_POSITION", "50"))
 # Windows notifications when a run starts (if there's work) and ends.
 NOTIFY = os.environ.get("NOTIFY", "true").lower() not in ("0", "false", "no")
 

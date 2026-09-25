@@ -204,7 +204,8 @@ exist, the track is marked not found and retried later.
 - **Failed downloads**: files from up to 3 different users are tried, best
   first. A user whose download slskd can't queue, rejects, fails or
   doesn't finish in time is skipped (its transfer is cancelled) for the
-  next one.
+  next one. So is a user with more than `MAX_QUEUE_POSITION` (default 50)
+  downloads queued ahead of ours, without waiting for the timeout.
 - **Network hiccups**: a track that fails because of the network (DNS,
   timeouts, dropped connections) is retried once after 30 seconds.
 - **Retries**: tracks that weren't found or failed to download are

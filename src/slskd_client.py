@@ -319,10 +319,13 @@ def wait_for_download(
     username: str, filename: str, transfer_id: str | None = None, timeout: int | None = None
 ) -> tuple[bool, str]:
     """Returns (succeeded, last state). slskd states are flag combinations
-    such as "Completed, Succeeded" or "Completed, Errored"."""
+    such as "Completed, Succeeded" or "Completed, Errored". Gives up early
+    when the other user has more than MAX_QUEUE_POSITION downloads ahead of
+    ours: it would never start in time."""
     timeout = timeout or config.DOWNLOAD_TIMEOUT_SECONDS
     deadline = time.time() + timeout
     state = "not found"
+    next_position_check = 0.0
 
     while time.time() < deadline:
         transfer = _find_transfer(username, filename, transfer_id)
@@ -332,9 +335,33 @@ def wait_for_download(
                 return True, state
             if "Completed" in state:
                 return False, state
+            if "Queued, Remotely" in state and time.time() >= next_position_check:
+                next_position_check = time.time() + QUEUE_CHECK_INTERVAL
+                position = queue_position(username, transfer_id or transfer.get("id"))
+                if position is not None and position > config.MAX_QUEUE_POSITION:
+                    return False, f"queued at position {position}"
         time.sleep(2)
 
     return False, f"timed out ({state})"
+
+
+QUEUE_CHECK_INTERVAL = 30  # seconds between queue position checks
+
+
+def queue_position(username: str, transfer_id: str | None) -> int | None:
+    """Our place in the other user's upload queue, or None if unknown."""
+    if not transfer_id:
+        return None
+    try:
+        resp = requests.get(
+            f"{_base()}/api/v0/transfers/downloads/{quote(username, safe='')}/{transfer_id}/position",
+            headers=_headers(),
+            timeout=30,  # slskd asks the other user, which can take a while
+        )
+        resp.raise_for_status()
+        return int(resp.json())
+    except (requests.RequestException, ValueError, TypeError):
+        return None
 
 
 def find_downloaded_file(filename: str, started_at: float) -> Path | None:
