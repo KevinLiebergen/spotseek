@@ -3,9 +3,12 @@ import itertools
 import logging
 import logging.handlers
 import re
+import socket
 import sys
 import time
 from pathlib import Path
+
+import requests
 
 from . import (
     config,
@@ -72,6 +75,48 @@ def search_queries(artist: str, title: str, artist_optional: bool = False) -> li
     return queries
 
 
+# Files from this many different users are tried before giving up on a track.
+MAX_CANDIDATES = 3
+NETWORK_RETRY_DELAY = 30  # seconds before retrying a track that hit a network error
+
+_NETWORK_ERRORS = (socket.gaierror, TimeoutError, ConnectionError, requests.ConnectionError, requests.Timeout)
+_NETWORK_MESSAGES = re.compile(r"getaddrinfo|timed out|connection (reset|aborted|refused)|name resolution", re.I)
+
+
+def _is_network_error(e: BaseException) -> bool:
+    """Whether an error (or one it was raised from) is a network problem.
+    yt-dlp wraps them in its own errors, so the message is checked too."""
+    seen = set()
+    while e is not None and id(e) not in seen:
+        seen.add(id(e))
+        if isinstance(e, _NETWORK_ERRORS) or _NETWORK_MESSAGES.search(str(e)):
+            return True
+        e = e.__cause__ or e.__context__
+    return False
+
+
+def _download_first(candidates: list[tuple[str, dict]]) -> tuple[dict, float] | None:
+    """Downloads the first candidate that works: (file, time it started).
+    A user whose download slskd rejects, fails or doesn't finish in time is
+    skipped for the next one."""
+    for username, file_info in candidates:
+        started_at = time.time()
+        try:
+            transfer_id = slskd_client.enqueue_download(username, file_info)
+        except requests.HTTPError as e:
+            # e.g. slskd answers 500 for some user names ("{{{{d(*_*)b}}}}")
+            log.warning("slskd couldn't queue the download from %s (%s), trying the next file", username, e)
+            continue
+        ok, transfer_state = slskd_client.wait_for_download(
+            username, file_info["filename"], transfer_id
+        )
+        if ok:
+            return file_info, started_at
+        log.warning("Download failed (%s) from %s: %s", transfer_state, username, file_info["filename"])
+        slskd_client.cancel_download(username, transfer_id)
+    return None
+
+
 def process_track(track: dict) -> None:
     title = track["name"]
     artist = track["artists"][0]["name"]
@@ -94,28 +139,23 @@ def process_track(track: dict) -> None:
             return
 
     queries = search_queries(artist, title, track.get("artist_is_uploader", False))
+    ranked = []
     for query in queries:
         slskd_client.wait_until_ready()
-        responses = slskd_client.search(query)
-        username, file_info = slskd_client.pick_best_file(responses, duration_seconds, title)
-        if file_info:
+        ranked = slskd_client.rank_files(slskd_client.search(query), duration_seconds, title)
+        if ranked:
             break
 
-    if not file_info:
+    if not ranked:
         log.warning("No valid results on Soulseek for: %s", " | ".join(queries))
         state.mark_processed(spotify_id, title, artist, "not_found")
         return
 
-    started_at = time.time()
-    transfer_id = slskd_client.enqueue_download(username, file_info)
-    ok, transfer_state = slskd_client.wait_for_download(
-        username, file_info["filename"], transfer_id
-    )
-
-    if not ok:
-        log.warning("Download failed (%s): %s", transfer_state, file_info["filename"])
+    downloaded = _download_first(slskd_client.top_candidates(ranked, MAX_CANDIDATES))
+    if not downloaded:
         state.mark_processed(spotify_id, title, artist, "download_failed")
         return
+    file_info, started_at = downloaded
 
     downloaded_path = slskd_client.find_downloaded_file(file_info["filename"], started_at)
     if not downloaded_path:
@@ -266,14 +306,21 @@ def main() -> None:
     retries = ({"id": i} for i in retry_ids)
 
     for track in itertools.chain(reversed(new_tracks), retries):  # new: oldest first
-        try:
-            process_track(_load(sp, track))
-        except slskd_client.SlskdError as e:
-            # Not the track's fault: stop here and leave the rest for the next run.
-            log.error("Stopping: %s", e)
-            return
-        except Exception:
-            log.exception("Error processing '%s'", track.get("name") or track["id"])
+        name = track.get("name") or track["id"]
+        for attempt in (1, 2):
+            try:
+                process_track(_load(sp, track))
+            except slskd_client.SlskdError as e:
+                # Not the track's fault: stop here and leave the rest for the next run.
+                log.error("Stopping: %s", e)
+                return
+            except Exception as e:
+                if attempt == 1 and _is_network_error(e):
+                    log.warning("Network error on '%s' (%s), retrying in %ds", name, e, NETWORK_RETRY_DELAY)
+                    time.sleep(NETWORK_RETRY_DELAY)
+                    continue
+                log.exception("Error processing '%s'", name)
+            break
 
 
 def sync_rekordbox() -> None:

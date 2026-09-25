@@ -198,10 +198,11 @@ def _is_other_version(file_name: str, title: str) -> bool:
     return bool(file_tags)
 
 
-def pick_best_file(
+def rank_files(
     responses: list[dict], duration_seconds: float | None = None, title: str = ""
-):
-    """Picks the best file across all search responses. Prefers users with a
+) -> list[tuple[str, dict]]:
+    """(username, file) of every acceptable file across all search
+    responses, best first. Prefers users with a
     free upload slot (so the download starts right away), then extended or
     original mixes, then files whose length could be checked, then the
     preferred format, then bitrate and a short queue. Discards files that
@@ -235,12 +236,43 @@ def pick_best_file(
             )
             candidates.append((score, username, file_info))
 
-    if not candidates:
-        return None, None
-
     candidates.sort(key=lambda c: c[0], reverse=True)
-    _, username, file_info = candidates[0]
-    return username, file_info
+    return [(username, file_info) for _, username, file_info in candidates]
+
+
+def pick_best_file(responses: list[dict], duration_seconds: float | None = None, title: str = ""):
+    """(username, file) of the best candidate, or (None, None)."""
+    ranked = rank_files(responses, duration_seconds, title)
+    return ranked[0] if ranked else (None, None)
+
+
+def top_candidates(ranked: list[tuple[str, dict]], limit: int) -> list[tuple[str, dict]]:
+    """The best file of each of the first `limit` distinct users: if one
+    user fails, trying another file of theirs rarely helps."""
+    picked, users = [], set()
+    for username, file_info in ranked:
+        if username not in users:
+            users.add(username)
+            picked.append((username, file_info))
+            if len(picked) == limit:
+                break
+    return picked
+
+
+def cancel_download(username: str, transfer_id: str | None) -> None:
+    """Best effort: removes a queued or failed transfer, so a download we
+    gave up on doesn't complete later on its own."""
+    if not transfer_id:
+        return
+    try:
+        requests.delete(
+            f"{_base()}/api/v0/transfers/downloads/{quote(username, safe='')}/{transfer_id}",
+            headers=_headers(),
+            params={"remove": "true"},
+            timeout=15,
+        )
+    except requests.RequestException:
+        pass
 
 
 def enqueue_download(username: str, file_info: dict) -> str | None:
