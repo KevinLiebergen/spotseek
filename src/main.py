@@ -174,7 +174,7 @@ def process_track(track: dict) -> str:
     state.mark_processed(spotify_id, title, artist, "ok")
 
     if config.COPY_TO_DIR:
-        folder = _genre_folder(final_path, artist, title)
+        folder = _genre_folder(final_path, artist, title, file_info["filename"])
         target_dir = config.COPY_TO_DIR / folder if folder else config.COPY_TO_DIR
         copy_path = organizer.copy_to(final_path, target_dir, artist, title)
         log.info("Copied -> %s", copy_path)
@@ -185,13 +185,13 @@ def process_track(track: dict) -> str:
     return "ok"
 
 
-def _genre_folder(path: Path, artist: str, title: str) -> str | None:
+def _genre_folder(path: Path, artist: str, title: str, source_path: str = "") -> str | None:
     """The genre subfolder of COPY_TO_DIR to file the track in, or None to
     leave it at the top for you to file by hand."""
     if not config.SORT_BY_GENRE or not Path(config.GENRES_CONFIG_PATH).is_file():
         return None
     try:
-        result = genre.classify(path, artist, title)
+        result = genre.classify(path, artist, title, source_path=source_path)
     except Exception:
         log.exception("Genre classification failed for %s - %s", artist, title)
         return None

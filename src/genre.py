@@ -3,6 +3,8 @@ track belongs to, by combining several weak signals:
 
 - the genre tag inside the file (often set by the store it was bought from),
   ignoring junk such as URLs or a list of every genre on a compilation;
+- the names of the Soulseek folders the file was downloaded from, which
+  often say the genre ("Beatport - Top 100 Deep House", "TECH HOUSE");
 - the styles Discogs gives for matching releases (DISCOGS_TOKEN recommended);
 - Last.fm's top tags for the track, or for the artist when the track has
   none, which is usually the case (needs LASTFM_API_KEY); they also hint at
@@ -379,10 +381,24 @@ def library_folders(artist: str, exclude: Path | None = None) -> dict[str, float
     return {f: confidence * n / total for f, n in counts.items()}
 
 
+def soulseek_dirs(source_path: str, levels: int = 3) -> list[str]:
+    """The last few directory names of a Soulseek path, without the share's
+    root (often "@@user" or a drive) or the file name."""
+    parts = [p for p in re.split(r"[\\/]", source_path) if p][:-1]
+    parts = [p for p in parts if not p.startswith("@@") and not re.fullmatch(r"[A-Za-z]:", p)]
+    return parts[-levels:]
+
+
 # --- scoring ---------------------------------------------------------------
 
 
-def classify(path: Path, artist: str, title: str, folders: dict | None = None) -> Classification:
+def classify(
+    path: Path, artist: str, title: str, folders: dict | None = None, source_path: str = ""
+) -> Classification:
+    """`source_path` is where the file came from on Soulseek, e.g.
+    "music/Beatport - Top 100 Deep House 2024/track.flac" (with backslashes):
+    the folder names often say the genre, which helps with tracks no
+    catalogue knows yet."""
     folders = folders or load_folders()
     scores: dict[str, float] = defaultdict(float)
     evidence = []
@@ -427,6 +443,9 @@ def classify(path: Path, artist: str, title: str, folders: dict | None = None) -
 
     for genre in tag_genres:
         add("tag", genre, 2.0)
+    # Counts once per folder genre, however many directories repeat it.
+    for genre in {_folders_for(_normalize(d), folders)[0] for d in soulseek_dirs(source_path)} - {None}:
+        add("soulseek folder", genre, 2.0)
     # For a remix or edit Discogs usually finds the original song, which may
     # be another genre entirely (a hip hop classic remixed as tech house).
     is_version = bool(slskd_client._remixer_words(slskd_client.VERSION_SUFFIX.sub("", title)))

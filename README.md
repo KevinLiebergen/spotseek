@@ -86,6 +86,8 @@ you to file by hand. `data/spotseek.log` says where each track went and
 why. The classifier (`src/genre.py`) combines:
 
 - the genre and BPM tags inside the file;
+- the names of the Soulseek folders the file came from (e.g. "Beatport -
+  Top 100 Deep House"), which help with releases no catalogue knows yet;
 - Discogs styles of releases by the same artist (`DISCOGS_TOKEN`);
 - Last.fm tags of the track or, usually, its artist (`LASTFM_API_KEY`);
 - the folder where you already filed other tracks by that artist;
