@@ -21,6 +21,12 @@ _FREE_DOWNLOAD = [
 ]
 
 
+# "9. ", "03 - ", "12) ": a track number from an album upload. Every word of a
+# Soulseek query has to be in the file path, so it would make the search
+# fail. A separator and a space are required, so "2Pac" or "50 Cent" stay.
+_TRACK_NUMBER = re.compile(r"^\s*\d{1,3}\s*[.)\-–]\s+")
+
+
 def _likes_url() -> str:
     return f"https://soundcloud.com/{config.SOUNDCLOUD_USER}/likes"
 
@@ -30,6 +36,7 @@ def _split_title(title: str) -> tuple[str | None, str]:
     convention. Returns (None, title) when the title doesn't follow it."""
     for pattern in _FREE_DOWNLOAD:
         title = pattern.sub("", title)
+    title = _TRACK_NUMBER.sub("", title)
     if "|" in title:  # "ROOKIE #4 | TEN CUIDADO (EDIT)": series name first
         title = title.rsplit("|", 1)[1]
     title = " ".join(title.split())
