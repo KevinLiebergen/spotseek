@@ -43,6 +43,9 @@ PREFERRED_FORMATS = [f.strip() for f in os.environ.get("PREFERRED_FORMATS", "fla
 MIN_BITRATE = int(os.environ.get("MIN_BITRATE", "256"))
 SEARCH_TIMEOUT_SECONDS = int(os.environ.get("SEARCH_TIMEOUT_SECONDS", "20"))
 DOWNLOAD_TIMEOUT_SECONDS = int(os.environ.get("DOWNLOAD_TIMEOUT_SECONDS", "600"))
+# Windows notifications when a run starts (if there's work) and ends.
+NOTIFY = os.environ.get("NOTIFY", "true").lower() not in ("0", "false", "no")
+
 # Don't download likes you already have somewhere in COPY_TO_DIR.
 SKIP_DUPLICATES = os.environ.get("SKIP_DUPLICATES", "true").lower() not in ("0", "false", "no")
 

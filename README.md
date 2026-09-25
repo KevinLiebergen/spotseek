@@ -62,6 +62,10 @@ python -m src.main
 ```
 
 Check `data/spotseek.log` to see what it did with each new track.
+`data/ultimo-resumen.txt` summarizes the last run (what was downloaded
+and where, what wasn't found, errors), and with `NOTIFY=true` (default) a
+Windows notification tells you when a run starts, if there's work, and how
+it ended.
 
 The **first run doesn't download anything**: it only records your current
 likes in `data/state.db`, so that from then on only new likes are

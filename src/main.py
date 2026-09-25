@@ -14,6 +14,7 @@ from . import (
     config,
     duplicates,
     genre,
+    notify,
     organizer,
     slskd_client,
     soundcloud_client,
@@ -117,7 +118,10 @@ def _download_first(candidates: list[tuple[str, dict]]) -> tuple[dict, float] | 
     return None
 
 
-def process_track(track: dict) -> None:
+def process_track(track: dict) -> str:
+    """Downloads and files one track. Returns how it ended: "ok:<folder>",
+    "ok" (left for you to file), "duplicate", "not_found", "download_failed",
+    "file_not_found" or "skipped_long"."""
     title = track["name"]
     artist = track["artists"][0]["name"]
     spotify_id = track["id"]
@@ -129,14 +133,14 @@ def process_track(track: dict) -> None:
         # A DJ set or live recording (common among SoundCloud likes), not a track.
         log.warning("Skipping, %d min long: %s - %s", duration_seconds // 60, artist, title)
         state.mark_processed(spotify_id, title, artist, "skipped_long")
-        return
+        return "skipped_long"
 
     if config.SKIP_DUPLICATES:
         existing = duplicates.find(artist, title)
         if existing:
             log.info("Already in your collection, not downloading: %s", existing)
             state.mark_processed(spotify_id, title, artist, "duplicate")
-            return
+            return "duplicate"
 
     queries = search_queries(artist, title, track.get("artist_is_uploader", False))
     ranked = []
@@ -149,19 +153,19 @@ def process_track(track: dict) -> None:
     if not ranked:
         log.warning("No valid results on Soulseek for: %s", " | ".join(queries))
         state.mark_processed(spotify_id, title, artist, "not_found")
-        return
+        return "not_found"
 
     downloaded = _download_first(slskd_client.top_candidates(ranked, MAX_CANDIDATES))
     if not downloaded:
         state.mark_processed(spotify_id, title, artist, "download_failed")
-        return
+        return "download_failed"
     file_info, started_at = downloaded
 
     downloaded_path = slskd_client.find_downloaded_file(file_info["filename"], started_at)
     if not downloaded_path:
         log.warning("Downloaded file not found under %s", config.DOWNLOAD_DIR)
         state.mark_processed(spotify_id, title, artist, "file_not_found")
-        return
+        return "file_not_found"
 
     final_path = organizer.tidy_download(downloaded_path, artist, title)
 
@@ -177,6 +181,8 @@ def process_track(track: dict) -> None:
         duplicates.remember(copy_path, artist, title)
         if folder:
             state.mark_processed(spotify_id, title, artist, f"ok:{folder}")
+            return f"ok:{folder}"
+    return "ok"
 
 
 def _genre_folder(path: Path, artist: str, title: str) -> str | None:
@@ -298,21 +304,29 @@ def main() -> None:
     new_ids = {t["id"] for t in new_tracks}
     retry_ids = [i for i in state.get_retryable_ids(config.MAX_ATTEMPTS) if i not in new_ids]
 
+    summary.new, summary.retries = len(new_tracks), len(retry_ids)
     if not new_tracks and not retry_ids:
         log.info("No new tracks.")
         return
 
     log.info("%d new track(s), %d to retry.", len(new_tracks), len(retry_ids))
+    notify.toast(
+        "spotseek",
+        f"{len(new_tracks)} likes nuevos y {len(retry_ids)} reintentos: descargando...",
+    )
     retries = ({"id": i} for i in retry_ids)
 
     for track in itertools.chain(reversed(new_tracks), retries):  # new: oldest first
         name = track.get("name") or track["id"]
         for attempt in (1, 2):
             try:
-                process_track(_load(sp, track))
+                loaded = _load(sp, track)
+                name = f"{loaded['artists'][0]['name']} - {loaded['name']}"
+                summary.add(name, process_track(loaded))
             except slskd_client.SlskdError as e:
                 # Not the track's fault: stop here and leave the rest for the next run.
                 log.error("Stopping: %s", e)
+                summary.problem = f"slskd no conecta con Soulseek ({e})"
                 return
             except Exception as e:
                 if attempt == 1 and _is_network_error(e):
@@ -320,28 +334,43 @@ def main() -> None:
                     time.sleep(NETWORK_RETRY_DELAY)
                     continue
                 log.exception("Error processing '%s'", name)
+                summary.add(name, "error")
             break
 
 
-def sync_rekordbox() -> None:
+def sync_rekordbox() -> str:
     """Brings the rekordbox collection and genre playlists in line with the
-    genre folders, if enabled and rekordbox is closed (see src/rekordbox.py)."""
+    genre folders, if enabled and rekordbox is closed (see src/rekordbox.py).
+    Returns a line about it for the run summary."""
     if not (config.REKORDBOX_SYNC and config.COPY_TO_DIR):
-        return
+        return ""
     from . import rekordbox  # needs pyrekordbox, only imported when enabled
 
     try:
-        rekordbox.sync(list(genre.load_folders()))
+        plan = rekordbox.sync(list(genre.load_folders()))
     except Exception:
         log.exception("rekordbox sync failed; the collection wasn't changed")
+        return "rekordbox: error al sincronizar, mira el log"
+    if plan is None:
+        return "rekordbox estaba abierto: se actualizará la próxima vez"
+    if plan.new_tracks:
+        return f"rekordbox: {len(plan.new_tracks)} nuevas en sus playlists, pendientes de analizar"
+    return "rekordbox al día"
+
+
+summary = notify.RunSummary()
 
 
 if __name__ == "__main__":
     try:
         main()
         # Also after runs with nothing new: it picks up tracks you filed by hand.
-        sync_rekordbox()
-    except Exception:
+        summary.rekordbox = sync_rekordbox()
+    except Exception as e:
         # The scheduled task has no visible console: make sure it's in the log.
         log.exception("Run failed")
+        summary.problem = f"error inesperado ({e}), mira el log"
         raise
+    finally:
+        summary.write()
+        notify.toast("spotseek" + (" - atención" if summary.problem else ""), summary.headline())
