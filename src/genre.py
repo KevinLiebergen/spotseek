@@ -62,6 +62,11 @@ _NON_SPANISH_TAGS = {
 _SPANISH_LETTERS = re.compile(r"[ñáéíóúü¿¡]", re.IGNORECASE)
 MIN_SCORE = 2.0  # points the winning folder needs...
 MIN_MARGIN = 1.5  # ...and how many times the runner-up's score it must have
+# The artist's Last.fm tags alone can decide when they all agree and add up to
+# at least this: one strong tag ("rap" at 100% relevance is 0.6) isn't enough,
+# it takes two agreeing ones ("rap" + "spanish rap"). Checked against a sorted
+# collection: 0.6 got 2 of 5 wrong, 1.0 got 4 of 4 right.
+ARTIST_TAGS_MIN_WEIGHT = 1.0
 BPM_TOLERANCE = 3
 _JUNK_TAG = re.compile(r"https?:|www\.|\.com\b|;;|\bunknown\b|\bother\b", re.IGNORECASE)
 _TAG_SEPARATORS = re.compile(r"\s*[,;|]\s*")
@@ -414,6 +419,8 @@ def classify(
             low - tolerance <= bpm <= high + tolerance for low, high in folders[folder]["bpm"]
         )
 
+    artist_tag_folders: dict[str, float] = defaultdict(float)  # from the artist's Last.fm tags
+
     def add(source: str, genre: str, weight: float) -> None:
         key, targets = _folders_for(_normalize(genre), folders)
         if not targets:
@@ -439,6 +446,8 @@ def classify(
             weight /= 2
         for folder in targets:
             scores[folder] += weight
+            if source == "lastfm artist":
+                artist_tag_folders[folder] += weight
         evidence.append(f"{source}: {genre} ({weight:.1f})")
 
     for genre in tag_genres:
@@ -482,6 +491,21 @@ def classify(
         runner_up = ranked[1][1] if len(ranked) > 1 else 0.0
         if runner_up == 0 or ranked[0][1] >= MIN_MARGIN * runner_up:
             folder = ranked[0][0]
+
+    # An artist's Last.fm tags alone are too weak to reach MIN_SCORE, but when
+    # every one of them points to the same folder and nothing points elsewhere,
+    # that's the artist's style ("Natos y Waor": spanish rap). Not for remixes
+    # and edits, which often move a song to another style.
+    # Any version word counts here, even without a remixer's name ("Hoe
+    # [EDIT]", "Sudores Frios Mix And Noise REMIX"); radio edits and
+    # original/extended mixes don't, being the same track.
+    any_version = bool(slskd_client._VERSION_TAGS.search(slskd_client.VERSION_SUFFIX.sub("", title)))
+    if folder is None and not any_version and len(artist_tag_folders) == 1:
+        only, weight = next(iter(artist_tag_folders.items()))
+        others = [f for f, score in scores.items() if f != only and score > 0]
+        if not others and weight >= ARTIST_TAGS_MIN_WEIGHT:
+            folder = only
+            evidence.append(f"decided by the artist's Last.fm tags, all pointing to {only}")
 
     return Classification(
         folder=folder,

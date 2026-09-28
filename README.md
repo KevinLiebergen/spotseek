@@ -203,6 +203,9 @@ optionally a BPM range and a language (see the comments in
 - Discogs styles of releases by the same artist (`DISCOGS_TOKEN`), weighted
   down for remixes, where Discogs usually finds the original song;
 - Last.fm tags of the track or, usually, of its artist (`LASTFM_API_KEY`);
+  when nothing else decides, the artist's tags alone can, if they all
+  point to the same folder (e.g. "rap" + "spanish rap") and the track
+  isn't a remix or edit, which often changes the style;
 - the folder where you already filed other tracks by that artist;
 - a Spanish-language guess, for folders split by language (e.g. hip hop and
   Spanish rap).
