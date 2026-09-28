@@ -73,8 +73,6 @@ REKORDBOX_PLAYLIST_FOLDER = os.environ.get("REKORDBOX_PLAYLIST_FOLDER", "my_musi
 # until they've been tried this many times.
 MAX_ATTEMPTS = int(os.environ.get("MAX_ATTEMPTS", "5"))
 
-# Fallback to yt-dlp (YouTube) for a track not found, or not downloadable,
-# on Soulseek. Requires ffmpeg on PATH.
+# Fallback to yt-dlp (the like's SoundCloud page, then YouTube) for a track
+# not found, or not downloadable, on Soulseek. The audio is kept as served.
 YTDLP_FALLBACK = os.environ.get("YTDLP_FALLBACK", "true").lower() not in ("0", "false", "no")
-YTDLP_AUDIO_FORMAT = os.environ.get("YTDLP_AUDIO_FORMAT", "mp3")
-YTDLP_AUDIO_QUALITY = os.environ.get("YTDLP_AUDIO_QUALITY", "0")  # 0 = best VBR

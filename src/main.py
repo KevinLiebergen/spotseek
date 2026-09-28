@@ -155,30 +155,30 @@ def _download(
     duration_seconds: float | None,
     artist_optional: bool,
     source_url: str = "",
-) -> tuple[Path | None, str, str]:
+) -> tuple[Path | None, str, str, str]:
     """Soulseek first; if it's not found there, its download fails, or the
     finished file goes missing, falls back to yt-dlp: straight from the
     like's own page (source_url, e.g. its SoundCloud URL) when there is
     one, then a YouTube search. Returns (downloaded_path, source_path,
-    outcome): outcome is "" on success, else the Soulseek-side state to
-    record."""
+    outcome, via): outcome is "" on success, else the Soulseek-side state to
+    record; via is "" for Soulseek, "SC" or "YT" for yt-dlp downloads."""
     downloaded_path, source_path, outcome = _from_soulseek(
         artist, title, duration_seconds, artist_optional
     )
     if downloaded_path:
-        return downloaded_path, source_path, ""
+        return downloaded_path, source_path, "", ""
 
     log.info("Falling back to yt-dlp for: %s - %s", artist, title)
     if source_url:
         downloaded_path = youtube_client.download_from_source(source_url)
         if downloaded_path:
-            return downloaded_path, "", ""
+            return downloaded_path, "", "", "SC"
 
     downloaded_path = youtube_client.download(artist, title, duration_seconds)
     if downloaded_path:
-        return downloaded_path, "", ""
+        return downloaded_path, "", "", "YT"
 
-    return None, "", outcome
+    return None, "", outcome, ""
 
 
 def process_track(track: dict) -> str:
@@ -205,7 +205,7 @@ def process_track(track: dict) -> str:
             state.mark_processed(spotify_id, title, artist, "duplicate")
             return "duplicate"
 
-    downloaded_path, source_path, outcome = _download(
+    downloaded_path, source_path, outcome, via = _download(
         artist,
         title,
         duration_seconds,
@@ -216,7 +216,10 @@ def process_track(track: dict) -> str:
         state.mark_processed(spotify_id, title, artist, outcome)
         return outcome
 
-    final_path = organizer.tidy_download(downloaded_path, artist, title)
+    # yt-dlp downloads are lossy streams (~128-160 kbps): mark them in the
+    # name, e.g. "Artist - Title [SC].m4a", so a better copy can be sought.
+    file_title = f"{title} [{via}]" if via else title
+    final_path = organizer.tidy_download(downloaded_path, artist, file_title)
 
     log.info("Downloaded -> %s", final_path)
     # Record it before copying so a failed copy doesn't cause a re-download.
@@ -225,7 +228,7 @@ def process_track(track: dict) -> str:
     if config.COPY_TO_DIR:
         folder = _genre_folder(final_path, artist, title, source_path)
         target_dir = config.COPY_TO_DIR / folder if folder else config.COPY_TO_DIR
-        copy_path = organizer.copy_to(final_path, target_dir, artist, title)
+        copy_path = organizer.copy_to(final_path, target_dir, artist, file_title)
         log.info("Copied -> %s", copy_path)
         duplicates.remember(copy_path, artist, title)
         if folder:

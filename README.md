@@ -164,21 +164,29 @@ still not connected, the run stops without marking the remaining tracks.
 Each finished track stays in slskd's downloads folder (`DOWNLOAD_DIR`) as
 `Artist - Title.ext`, and a copy goes into your collection (`COPY_TO_DIR`).
 
-### YouTube fallback
+### SoundCloud / YouTube fallback
 
 When a track isn't found on Soulseek, its download fails on every user
 tried, or the finished file goes missing, spotseek falls back to yt-dlp (no
-API key needed). For a SoundCloud like it first tries downloading straight
-from its own SoundCloud URL, since many edits and bootlegs are exclusive to
-it and wouldn't turn up on a YouTube search either; if that doesn't apply
-or fails, it searches YouTube and downloads the closest-duration match
-among the top 3 results as audio (`YTDLP_AUDIO_FORMAT`, default mp3). It's
-only recorded as `not_found`/`download_failed`/`file_not_found` (and
+API key needed):
+
+1. for a SoundCloud like, straight from its own SoundCloud page, since many
+   edits and bootlegs are exclusive to it;
+2. otherwise, or if that fails, a YouTube search for "Artist Title". A
+   result is only used if its title contains the track's title words (and
+   the remixer's name, for a remix), its length is within 20 seconds of the
+   track's when that's known, and it isn't longer than 15 minutes.
+
+The audio is never re-encoded, since that would only lose quality.
+SoundCloud and YouTube serve it in fragments, though, and ffmpeg is needed
+to put them back into a regular `.m4a` (a plain remux): install it with
+`winget install Gyan.FFmpeg`. Without ffmpeg, only SoundCloud's plain
+128 kbps MP3 is used and YouTube is skipped, since a fragmented file may
+not load in DJ software. These files are
+usually 128-160 kbps, below `MIN_BITRATE`, so their names are marked:
+`Artist - Title [SC].m4a` or `[YT]`, to remind you to look for a better
+copy. A track is only recorded as `not_found`/`download_failed` (and
 retried later) if all of that fails. `YTDLP_FALLBACK=false` turns it off.
-Audio from this fallback is lossy regardless of `PREFERRED_FORMATS`/
-`MIN_BITRATE`, which only apply to the Soulseek search, and the YouTube
-search skips results longer than 15 minutes to avoid grabbing a full DJ
-set instead of the track.
 
 ## Genre sorting
 
