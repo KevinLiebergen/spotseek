@@ -150,12 +150,18 @@ def _from_soulseek(
 
 
 def _download(
-    artist: str, title: str, duration_seconds: float | None, artist_optional: bool
+    artist: str,
+    title: str,
+    duration_seconds: float | None,
+    artist_optional: bool,
+    source_url: str = "",
 ) -> tuple[Path | None, str, str]:
     """Soulseek first; if it's not found there, its download fails, or the
-    finished file goes missing, falls back to yt-dlp (YouTube). Returns
-    (downloaded_path, source_path, outcome): outcome is "" on success, else
-    the Soulseek-side state to record."""
+    finished file goes missing, falls back to yt-dlp: straight from the
+    like's own page (source_url, e.g. its SoundCloud URL) when there is
+    one, then a YouTube search. Returns (downloaded_path, source_path,
+    outcome): outcome is "" on success, else the Soulseek-side state to
+    record."""
     downloaded_path, source_path, outcome = _from_soulseek(
         artist, title, duration_seconds, artist_optional
     )
@@ -163,6 +169,11 @@ def _download(
         return downloaded_path, source_path, ""
 
     log.info("Falling back to yt-dlp for: %s - %s", artist, title)
+    if source_url:
+        downloaded_path = youtube_client.download_from_source(source_url)
+        if downloaded_path:
+            return downloaded_path, "", ""
+
     downloaded_path = youtube_client.download(artist, title, duration_seconds)
     if downloaded_path:
         return downloaded_path, "", ""
@@ -195,7 +206,11 @@ def process_track(track: dict) -> str:
             return "duplicate"
 
     downloaded_path, source_path, outcome = _download(
-        artist, title, duration_seconds, track.get("artist_is_uploader", False)
+        artist,
+        title,
+        duration_seconds,
+        track.get("artist_is_uploader", False),
+        track.get("source_url", ""),
     )
     if not downloaded_path:
         state.mark_processed(spotify_id, title, artist, outcome)

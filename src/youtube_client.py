@@ -1,9 +1,12 @@
 """Fallback downloader for tracks not found, or not downloadable, on
-Soulseek: searches YouTube with yt-dlp (no API key needed, same library
-already used to read SoundCloud likes) and downloads the audio. Requires
-ffmpeg on PATH for yt-dlp's audio extraction.
+Soulseek: with yt-dlp (no API key needed, same library already used to
+read SoundCloud likes), either downloads a track straight from its own
+page (its SoundCloud URL) or, when there is none, searches YouTube for
+"<artist> <title>" and downloads the closest match. Requires ffmpeg on
+PATH for yt-dlp's audio extraction.
 """
 import logging
+import re
 from pathlib import Path
 
 import yt_dlp
@@ -17,6 +20,53 @@ _SEARCH_RESULTS = 3
 # YouTube durations often include an intro/outro Soulseek files don't, so
 # this is looser than slskd_client.DURATION_TOLERANCE_SECONDS.
 _DURATION_TOLERANCE_SECONDS = 20
+
+_NOT_SLUG = re.compile(r"[^A-Za-z0-9]+")
+
+
+def _download_audio(url: str, filename_stem: str) -> Path | None:
+    """Downloads a single URL as audio into a temp subfolder of
+    DOWNLOAD_DIR (organizer.tidy_download moves it to the top, same as a
+    Soulseek download). None if the download failed."""
+    _TMP_DIR.mkdir(parents=True, exist_ok=True)
+    ydl_opts = {
+        "format": "bestaudio/best",
+        "outtmpl": str(_TMP_DIR / f"{filename_stem}.%(ext)s"),
+        "noplaylist": True,
+        "quiet": True,
+        "no_warnings": True,
+        "postprocessors": [
+            {
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": config.YTDLP_AUDIO_FORMAT,
+                "preferredquality": config.YTDLP_AUDIO_QUALITY,
+            }
+        ],
+    }
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
+    except yt_dlp.utils.DownloadError:
+        return None
+    return next(_TMP_DIR.glob(f"{filename_stem}.*"), None)
+
+
+def download_from_source(url: str) -> Path | None:
+    """Downloads a track straight from its own page instead of searching
+    for it, e.g. a SoundCloud like's URL: many SoundCloud edits and
+    bootlegs are exclusive to it and wouldn't turn up on a YouTube search
+    either. None if disabled or the download failed."""
+    if not config.YTDLP_FALLBACK:
+        return None
+
+    stem = _NOT_SLUG.sub("-", url).strip("-")[-80:] or "track"
+    downloaded_path = _download_audio(url, stem)
+    if not downloaded_path:
+        log.warning("yt-dlp direct download failed for: %s", url)
+        return None
+
+    log.info("Downloaded straight from its own page: %s", url)
+    return downloaded_path
 
 
 def _pick_entry(entries: list[dict], duration_seconds: float | None) -> dict | None:
@@ -33,9 +83,8 @@ def _pick_entry(entries: list[dict], duration_seconds: float | None) -> dict | N
 
 def download(artist: str, title: str, duration_seconds: float | None = None) -> Path | None:
     """Searches YouTube for "<artist> <title>" and downloads the closest
-    match as audio into a temp subfolder of DOWNLOAD_DIR (organizer.
-    tidy_download moves it to the top, same as a Soulseek download). Returns
-    None if disabled, nothing usable was found, or the download failed."""
+    match as audio. None if disabled, nothing usable was found, or the
+    download failed."""
     if not config.YTDLP_FALLBACK:
         return None
 
@@ -52,31 +101,9 @@ def download(artist: str, title: str, duration_seconds: float | None = None) -> 
         log.warning("No usable YouTube result for: %s", query)
         return None
 
-    _TMP_DIR.mkdir(parents=True, exist_ok=True)
-    ydl_opts = {
-        "format": "bestaudio/best",
-        "outtmpl": str(_TMP_DIR / f"{entry['id']}.%(ext)s"),
-        "noplaylist": True,
-        "quiet": True,
-        "no_warnings": True,
-        "postprocessors": [
-            {
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": config.YTDLP_AUDIO_FORMAT,
-                "preferredquality": config.YTDLP_AUDIO_QUALITY,
-            }
-        ],
-    }
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([f"https://www.youtube.com/watch?v={entry['id']}"])
-    except yt_dlp.utils.DownloadError:
-        log.warning("yt-dlp download failed for: %s", query)
-        return None
-
-    downloaded_path = next(_TMP_DIR.glob(f"{entry['id']}.*"), None)
+    downloaded_path = _download_audio(f"https://www.youtube.com/watch?v={entry['id']}", entry["id"])
     if not downloaded_path:
-        log.warning("yt-dlp reported success but no file found for: %s", query)
+        log.warning("yt-dlp download failed for: %s", query)
         return None
 
     log.info("Found on YouTube: %s", entry.get("title") or query)

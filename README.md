@@ -167,15 +167,18 @@ Each finished track stays in slskd's downloads folder (`DOWNLOAD_DIR`) as
 ### YouTube fallback
 
 When a track isn't found on Soulseek, its download fails on every user
-tried, or the finished file goes missing, spotseek searches YouTube with
-yt-dlp (no API key needed) and downloads the closest-duration match among
-the top 3 results as audio (`YTDLP_AUDIO_FORMAT`, default mp3). It's only
-recorded as `not_found`/`download_failed`/`file_not_found` (and retried
-later) if that also fails. `YTDLP_FALLBACK=false` turns it off. Audio
-pulled from YouTube is lossy regardless of `PREFERRED_FORMATS`/
-`MIN_BITRATE`, which only apply to the Soulseek search, and it skips
-results longer than 15 minutes to avoid grabbing a full DJ set instead of
-the track.
+tried, or the finished file goes missing, spotseek falls back to yt-dlp (no
+API key needed). For a SoundCloud like it first tries downloading straight
+from its own SoundCloud URL, since many edits and bootlegs are exclusive to
+it and wouldn't turn up on a YouTube search either; if that doesn't apply
+or fails, it searches YouTube and downloads the closest-duration match
+among the top 3 results as audio (`YTDLP_AUDIO_FORMAT`, default mp3). It's
+only recorded as `not_found`/`download_failed`/`file_not_found` (and
+retried later) if all of that fails. `YTDLP_FALLBACK=false` turns it off.
+Audio from this fallback is lossy regardless of `PREFERRED_FORMATS`/
+`MIN_BITRATE`, which only apply to the Soulseek search, and the YouTube
+search skips results longer than 15 minutes to avoid grabbing a full DJ
+set instead of the track.
 
 ## Genre sorting
 

@@ -56,6 +56,9 @@ def _to_track(info: dict) -> dict:
         "artists": [{"name": artist or info.get("uploader") or ""}],
         "artist_is_uploader": artist is None,
         "duration_ms": int((info.get("duration") or 0) * 1000),
+        # Lets a Soulseek miss fall back to downloading straight from here,
+        # for edits/bootlegs exclusive to SoundCloud (see src/youtube_client.py).
+        "source_url": info.get("webpage_url") or info.get("url") or "",
     }
 
 
