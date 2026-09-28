@@ -64,9 +64,10 @@ MIN_SCORE = 2.0  # points the winning folder needs...
 MIN_MARGIN = 1.5  # ...and how many times the runner-up's score it must have
 # The artist's Last.fm tags alone can decide when they all agree and add up to
 # at least this: one strong tag ("rap" at 100% relevance is 0.6) isn't enough,
-# it takes two agreeing ones ("rap" + "spanish rap"). Checked against a sorted
-# collection: 0.6 got 2 of 5 wrong, 1.0 got 4 of 4 right.
-ARTIST_TAGS_MIN_WEIGHT = 1.0
+# it takes two agreeing ones ("rap" + "spanish rap" is ~0.996, just under 1).
+# Checked against a sorted collection: 0.6 got 2 of 5 wrong; 0.95 keeps the
+# right ones and leaves out the wrong ones (0.6 and 0.9).
+ARTIST_TAGS_MIN_WEIGHT = 0.95
 BPM_TOLERANCE = 3
 _JUNK_TAG = re.compile(r"https?:|www\.|\.com\b|;;|\bunknown\b|\bother\b", re.IGNORECASE)
 _TAG_SEPARATORS = re.compile(r"\s*[,;|]\s*")
@@ -102,6 +103,7 @@ def load_folders(path: str | None = None) -> dict[str, dict]:
             "genres": {_normalize(g) for g in (rules or {}).get("genres", [])},
             "bpm": _bpm_ranges((rules or {}).get("bpm")),
             "spanish": (rules or {}).get("spanish"),
+            "versions": bool((rules or {}).get("versions")),
         }
         for folder, rules in raw.items()
     }
@@ -386,6 +388,35 @@ def library_folders(artist: str, exclude: Path | None = None) -> dict[str, float
     return {f: confidence * n / total for f, n in counts.items()}
 
 
+def _version_segments(title: str) -> list[str]:
+    """The parts of a title in parentheses/brackets or after " - " that name
+    a version: "LI4M Techno Remix" in "Bajo Zero (LI4M Techno Remix)"."""
+    segments = re.findall(r"[(\[]([^)\]]*)[)\]]", title)
+    if " - " in title:
+        segments.append(title.split(" - ", 1)[1])
+    return [s for s in segments if slskd_client._VERSION_TAGS.search(s)]
+
+
+def _version_styles(title: str, folders: dict) -> set[str]:
+    """Folder genres named right next to a version word in the title: the
+    style of a remix. "Techno" in "(LI4M Techno Remix)", "tech house" in
+    "(Remix Tech House)". A genre word that isn't next to it is usually part
+    of a name: "Funk" in "(Funk Tribu Edit)"."""
+    keys = {key for rules in folders.values() for key in rules["genres"]}
+    styles = set()
+    for segment in _version_segments(title):
+        words = _normalize(segment).split()
+        for i, word in enumerate(words):
+            if not slskd_client._VERSION_TAGS.fullmatch(word):
+                continue
+            before = [" ".join(words[j:i]) for j in range(max(0, i - 3), i)]
+            after = [" ".join(words[i + 1 : k]) for k in range(i + 2, min(len(words), i + 4) + 1)]
+            matches = [c for c in before + after if c in keys]
+            if matches:
+                styles.add(max(matches, key=len))
+    return styles
+
+
 def soulseek_dirs(source_path: str, levels: int = 3) -> list[str]:
     """The last few directory names of a Soulseek path, without the share's
     root (often "@@user" or a drive) or the file name."""
@@ -450,8 +481,20 @@ def classify(
                 artist_tag_folders[folder] += weight
         evidence.append(f"{source}: {genre} ({weight:.1f})")
 
+    # Any version word (remix, edit, bootleg...), even without a remixer's name
+    # ("Hoe [EDIT]", "Sudores Frios Mix And Noise REMIX"); radio edits and
+    # original/extended mixes don't count, being the same track.
+    any_version = bool(slskd_client._VERSION_TAGS.search(slskd_client.VERSION_SUFFIX.sub("", title)))
+
     for genre in tag_genres:
         add("tag", genre, 2.0)
+    # A remix or edit often names its style: "Bajo Zero (LI4M Techno Remix)",
+    # "Ten Cuidado (Wachu Dembow Edit)", "Oye (Remix Tech House)". Only the
+    # part of the title that names the version is read, so a song title in a
+    # mashup ("Superestrella X Party Rock (Dirty Sou Mashup)") isn't taken
+    # for a style.
+    for title_genre in _version_styles(title, folders):
+        add("title", title_genre, 2.0)
     # Counts once per folder genre, however many directories repeat it.
     for genre in {_folders_for(_normalize(d), folders)[0] for d in soulseek_dirs(source_path)} - {None}:
         add("soulseek folder", genre, 2.0)
@@ -496,16 +539,20 @@ def classify(
     # every one of them points to the same folder and nothing points elsewhere,
     # that's the artist's style ("Natos y Waor": spanish rap). Not for remixes
     # and edits, which often move a song to another style.
-    # Any version word counts here, even without a remixer's name ("Hoe
-    # [EDIT]", "Sudores Frios Mix And Noise REMIX"); radio edits and
-    # original/extended mixes don't, being the same track.
-    any_version = bool(slskd_client._VERSION_TAGS.search(slskd_client.VERSION_SUFFIX.sub("", title)))
     if folder is None and not any_version and len(artist_tag_folders) == 1:
         only, weight = next(iter(artist_tag_folders.items()))
         others = [f for f, score in scores.items() if f != only and score > 0]
         if not others and weight >= ARTIST_TAGS_MIN_WEIGHT:
             folder = only
             evidence.append(f"decided by the artist's Last.fm tags, all pointing to {only}")
+
+    # A remix or edit whose style can't be told goes to the folder marked
+    # "versions: true" (e.g. EDITS & MASHUPS), if there is one.
+    if folder is None and any_version:
+        versions_folder = next((f for f, rules in folders.items() if rules["versions"]), None)
+        if versions_folder:
+            folder = versions_folder
+            evidence.append(f"remix/edit of unclear style: {versions_folder}")
 
     return Classification(
         folder=folder,

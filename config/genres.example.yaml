@@ -9,6 +9,10 @@
 #   bpm:     optional [min, max], or a list of them. Picks between folders that share a genre
 #            ("techno" goes to PEAK TIME or HARD TECHNO by tempo) and rules a
 #            folder out when the file's BPM is clearly outside it.
+#   versions: optional true, on one folder only. Remixes, edits and mashups
+#            whose style can't be told go there instead of being left
+#            unclassified (party edits of known songs, sorted by BPM when
+#            you prepare a set).
 #   spanish: optional true/false. Picks between folders that share a genre by
 #            the track's language ("rap" goes to HIP HOP or RAP ESPAÑOL). The
 #            language is guessed from Discogs release countries and the words
@@ -76,3 +80,10 @@
 # is shared with DEEP & MELODIC (Discogs uses it for both sounds).
 "[13] EDM":
   genres: [edm, big room, electro house, progressive house, future house, dutch house, complextro, festival]
+
+# Remixes, edits and mashups of known songs whose style can't be told: party
+# edits (Estopa, Mana, C. Tangana remixes). Sort the playlist by BPM when you
+# prepare a set. A remix whose style is clear goes to that style's folder.
+"[14] EDITS & MASHUPS":
+  genres: [mashup, bootleg]
+  versions: true

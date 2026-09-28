@@ -198,6 +198,10 @@ optionally a BPM range and a language (see the comments in
 `config/genres.example.yaml`). The classifier combines:
 
 - the genre and BPM tags inside the file;
+- for a remix or edit, the style named right next to "Remix"/"Edit" in its
+  title: "(LI4M Techno Remix)", "(Remix Tech House)", "(Wachu Dembow Edit)"
+  (a genre word elsewhere, like "Funk" in "(Funk Tribu Edit)" or "Rock" in
+  a mashup's song names, doesn't count);
 - the names of the Soulseek folders the file came from (e.g. "Beatport -
   Top 100 Deep House"), useful for releases no catalogue knows yet;
 - Discogs styles of releases by the same artist (`DISCOGS_TOKEN`), weighted
@@ -209,6 +213,10 @@ optionally a BPM range and a language (see the comments in
 - the folder where you already filed other tracks by that artist;
 - a Spanish-language guess, for folders split by language (e.g. hip hop and
   Spanish rap).
+
+A remix, edit or mashup whose style still can't be told goes to the folder
+marked `versions: true` (in the example config, `[14] EDITS & MASHUPS`):
+party edits of known songs, to pick by BPM when preparing a set.
 
 BPM picks between folders that share a genre (plain "techno" goes to peak
 time or hard techno by tempo) and rules out folders whose tempo is clearly
