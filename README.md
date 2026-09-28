@@ -6,7 +6,8 @@ machine running rekordbox logs in, spotseek:
 
 1. reads your new Spotify likes (and optionally SoundCloud likes);
 2. searches for each one on Soulseek, through slskd, and downloads the best
-   file (original/extended mixes, lossless or high bitrate);
+   file (original/extended mixes, lossless or high bitrate), falling back
+   to YouTube (via yt-dlp) when Soulseek doesn't have it;
 3. works out its genre and copies it into the matching folder of your
    collection, e.g. `my_music\[01] TECH HOUSE`, or leaves it at the top of
    the collection for you to file when it isn't sure;
@@ -26,6 +27,8 @@ as lists of what you like.
   classifies and files each of them, and finally syncs rekordbox.
 - **`src/genre.py`**: the genre classifier, configured per folder in
   `config/genres.yaml`.
+- **`src/youtube_client.py`**: fallback for tracks Soulseek can't find or
+  download, using yt-dlp to search and download from YouTube.
 - **`src/rekordbox.py`**: keeps rekordbox's collection and genre playlists
   in line with your folders, through
   [pyrekordbox](https://github.com/dylanljones/pyrekordbox).
@@ -43,6 +46,9 @@ Prerequisites, on the Windows machine:
 - **A Spotify app** registered at https://developer.spotify.com/dashboard,
   for `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET`, with the redirect
   URI you set in `.env` (default `http://127.0.0.1:8888/callback`).
+- **ffmpeg on PATH**, needed by yt-dlp to extract/convert audio (SoundCloud
+  likes and the YouTube fallback both use it). Get a Windows build from
+  https://www.gyan.dev/ffmpeg/builds/ and add its `bin` folder to PATH.
 - Optional, both free, both improve genre classification: a Discogs token
   (https://www.discogs.com/settings/developers, "Generate new token") and a
   Last.fm API key (https://www.last.fm/api/account/create).
@@ -157,6 +163,19 @@ still not connected, the run stops without marking the remaining tracks.
 
 Each finished track stays in slskd's downloads folder (`DOWNLOAD_DIR`) as
 `Artist - Title.ext`, and a copy goes into your collection (`COPY_TO_DIR`).
+
+### YouTube fallback
+
+When a track isn't found on Soulseek, its download fails on every user
+tried, or the finished file goes missing, spotseek searches YouTube with
+yt-dlp (no API key needed) and downloads the closest-duration match among
+the top 3 results as audio (`YTDLP_AUDIO_FORMAT`, default mp3). It's only
+recorded as `not_found`/`download_failed`/`file_not_found` (and retried
+later) if that also fails. `YTDLP_FALLBACK=false` turns it off. Audio
+pulled from YouTube is lossy regardless of `PREFERRED_FORMATS`/
+`MIN_BITRATE`, which only apply to the Soulseek search, and it skips
+results longer than 15 minutes to avoid grabbing a full DJ set instead of
+the track.
 
 ## Genre sorting
 

@@ -20,6 +20,7 @@ from . import (
     soundcloud_client,
     spotify_client,
     state,
+    youtube_client,
 )
 
 LOG_DIR = Path(config.STATE_DB_PATH).parent
@@ -118,6 +119,57 @@ def _download_first(candidates: list[tuple[str, dict]]) -> tuple[dict, float] | 
     return None
 
 
+def _from_soulseek(
+    artist: str, title: str, duration_seconds: float | None, artist_optional: bool
+) -> tuple[Path | None, str, str]:
+    """Returns (downloaded_path, source_path, outcome): outcome is "" on
+    success, else the state to record if yt-dlp doesn't find it either."""
+    queries = search_queries(artist, title, artist_optional)
+    ranked = []
+    for query in queries:
+        slskd_client.wait_until_ready()
+        ranked = slskd_client.rank_files(slskd_client.search(query), duration_seconds, title)
+        if ranked:
+            break
+
+    if not ranked:
+        log.warning("No valid results on Soulseek for: %s", " | ".join(queries))
+        return None, "", "not_found"
+
+    downloaded = _download_first(slskd_client.top_candidates(ranked, MAX_CANDIDATES))
+    if not downloaded:
+        return None, "", "download_failed"
+    file_info, started_at = downloaded
+
+    downloaded_path = slskd_client.find_downloaded_file(file_info["filename"], started_at)
+    if not downloaded_path:
+        log.warning("Downloaded file not found under %s", config.DOWNLOAD_DIR)
+        return None, "", "file_not_found"
+
+    return downloaded_path, file_info["filename"], ""
+
+
+def _download(
+    artist: str, title: str, duration_seconds: float | None, artist_optional: bool
+) -> tuple[Path | None, str, str]:
+    """Soulseek first; if it's not found there, its download fails, or the
+    finished file goes missing, falls back to yt-dlp (YouTube). Returns
+    (downloaded_path, source_path, outcome): outcome is "" on success, else
+    the Soulseek-side state to record."""
+    downloaded_path, source_path, outcome = _from_soulseek(
+        artist, title, duration_seconds, artist_optional
+    )
+    if downloaded_path:
+        return downloaded_path, source_path, ""
+
+    log.info("Falling back to yt-dlp for: %s - %s", artist, title)
+    downloaded_path = youtube_client.download(artist, title, duration_seconds)
+    if downloaded_path:
+        return downloaded_path, "", ""
+
+    return None, "", outcome
+
+
 def process_track(track: dict) -> str:
     """Downloads and files one track. Returns how it ended: "ok:<folder>",
     "ok" (left for you to file), "duplicate", "not_found", "download_failed",
@@ -142,30 +194,12 @@ def process_track(track: dict) -> str:
             state.mark_processed(spotify_id, title, artist, "duplicate")
             return "duplicate"
 
-    queries = search_queries(artist, title, track.get("artist_is_uploader", False))
-    ranked = []
-    for query in queries:
-        slskd_client.wait_until_ready()
-        ranked = slskd_client.rank_files(slskd_client.search(query), duration_seconds, title)
-        if ranked:
-            break
-
-    if not ranked:
-        log.warning("No valid results on Soulseek for: %s", " | ".join(queries))
-        state.mark_processed(spotify_id, title, artist, "not_found")
-        return "not_found"
-
-    downloaded = _download_first(slskd_client.top_candidates(ranked, MAX_CANDIDATES))
-    if not downloaded:
-        state.mark_processed(spotify_id, title, artist, "download_failed")
-        return "download_failed"
-    file_info, started_at = downloaded
-
-    downloaded_path = slskd_client.find_downloaded_file(file_info["filename"], started_at)
+    downloaded_path, source_path, outcome = _download(
+        artist, title, duration_seconds, track.get("artist_is_uploader", False)
+    )
     if not downloaded_path:
-        log.warning("Downloaded file not found under %s", config.DOWNLOAD_DIR)
-        state.mark_processed(spotify_id, title, artist, "file_not_found")
-        return "file_not_found"
+        state.mark_processed(spotify_id, title, artist, outcome)
+        return outcome
 
     final_path = organizer.tidy_download(downloaded_path, artist, title)
 
@@ -174,7 +208,7 @@ def process_track(track: dict) -> str:
     state.mark_processed(spotify_id, title, artist, "ok")
 
     if config.COPY_TO_DIR:
-        folder = _genre_folder(final_path, artist, title, file_info["filename"])
+        folder = _genre_folder(final_path, artist, title, source_path)
         target_dir = config.COPY_TO_DIR / folder if folder else config.COPY_TO_DIR
         copy_path = organizer.copy_to(final_path, target_dir, artist, title)
         log.info("Copied -> %s", copy_path)
