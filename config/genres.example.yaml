@@ -13,6 +13,9 @@
 #            whose style can't be told go there instead of being left
 #            unclassified (party edits of known songs, sorted by BPM when
 #            you prepare a set).
+#   remixes_to_versions: optional true. A remix, edit or mashup that would
+#            land in this folder goes to the "versions" folder instead
+#            (remixes of urban music are party edits, not rap or reggaeton).
 #   spanish: optional true/false. Picks between folders that share a genre by
 #            the track's language ("rap" goes to HIP HOP or RAP ESPAÑOL). The
 #            language is guessed from Discogs release countries and the words
@@ -60,15 +63,18 @@
 "[09] HIP HOP":
   genres: [hip hop, hip-hop, rap, trap, boom bap, gangsta, conscious, east coast, west coast, r&b]
   spanish: false
+  remixes_to_versions: true
 
 "[10] RAP ESPAÑOL":
   genres: [hip hop, hip-hop, rap, trap, boom bap, rap espanol, spanish hip hop, hip hop espanol, rap en espanol]
   spanish: true
+  remixes_to_versions: true
 
 "[11] REGGAETON & LATIN URBAN":
   # "latin pop" is in both this folder and FIESTA ESPAÑOLA: Discogs uses it for
   # Chayanne and for commercial dembow alike, so other signals have to decide.
   genres: [reggaeton, dembow, perreo, moombahton, trap latino, latin trap, urbano latino, latin, latin pop]
+  remixes_to_versions: true
 
 # Spanish party pop and rock (verbena): El Canto del Loco, Melendi, Estopa,
 # Chayanne. Only Spanish-language tracks, so English rock stays out.

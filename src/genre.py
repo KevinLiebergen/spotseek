@@ -104,6 +104,7 @@ def load_folders(path: str | None = None) -> dict[str, dict]:
             "bpm": _bpm_ranges((rules or {}).get("bpm")),
             "spanish": (rules or {}).get("spanish"),
             "versions": bool((rules or {}).get("versions")),
+            "remixes_to_versions": bool((rules or {}).get("remixes_to_versions")),
         }
         for folder, rules in raw.items()
     }
@@ -547,12 +548,17 @@ def classify(
             evidence.append(f"decided by the artist's Last.fm tags, all pointing to {only}")
 
     # A remix or edit whose style can't be told goes to the folder marked
-    # "versions: true" (e.g. EDITS & MASHUPS), if there is one.
-    if folder is None and any_version:
-        versions_folder = next((f for f, rules in folders.items() if rules["versions"]), None)
-        if versions_folder:
+    # "versions: true" (e.g. EDITS & MASHUPS), if there is one. So does one
+    # that would land in a folder marked "remixes_to_versions" (remixes of
+    # urban music: party edits, not rap or reggaeton sets).
+    versions_folder = next((f for f, rules in folders.items() if rules["versions"]), None)
+    if versions_folder and any_version:
+        if folder is None:
             folder = versions_folder
             evidence.append(f"remix/edit of unclear style: {versions_folder}")
+        elif folders[folder]["remixes_to_versions"]:
+            evidence.append(f"remix of {folder} music: {versions_folder}")
+            folder = versions_folder
 
     return Classification(
         folder=folder,

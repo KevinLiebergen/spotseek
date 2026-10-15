@@ -217,6 +217,9 @@ optionally a BPM range and a language (see the comments in
 A remix, edit or mashup whose style still can't be told goes to the folder
 marked `versions: true` (in the example config, `[14] EDITS & MASHUPS`):
 party edits of known songs, to pick by BPM when preparing a set.
+So does one that would land in a folder marked `remixes_to_versions: true`
+(in the example config, the hip hop, Spanish rap and reggaeton folders):
+remixes of urban music are party edits rather than rap or reggaeton.
 
 BPM picks between folders that share a genre (plain "techno" goes to peak
 time or hard techno by tempo) and rules out folders whose tempo is clearly
