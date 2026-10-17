@@ -235,3 +235,40 @@ def sync(genre_folders: list[str], db_path: str | None = None, dry_run: bool = F
         return plan
     finally:
         db.close()
+
+
+def set_my_tag(db, content, category: str, name: str) -> bool:
+    """Gives the track the My Tag `name` of `category` (e.g. "Energy",
+    "High"), replacing any other tag of that category. Returns False when the
+    track already had exactly that tag."""
+    from uuid import uuid4
+
+    from pyrekordbox.db6 import tables
+
+    parent = next(t for t in db.get_my_tag() if t.Name == category and t.ParentID == "root")
+    siblings = {t.ID: t.Name for t in db.get_my_tag() if t.ParentID == parent.ID}
+    target = next(i for i, n in siblings.items() if n.lower() == name.lower())
+    current = db.query(tables.DjmdSongMyTag).filter_by(ContentID=content.ID).all()
+    current = [s for s in current if s.MyTagID in siblings]
+    if [s.MyTagID for s in current] == [target]:
+        return False
+    for song in current:
+        db.delete(song)
+    now = datetime.now()
+    db.add(tables.DjmdSongMyTag.create(
+        ID=str(uuid4()), MyTagID=target, ContentID=str(content.ID), UUID=str(uuid4()),
+        created_at=now, updated_at=now,
+    ))
+    return True
+
+
+def my_tag(db, content, category: str) -> str | None:
+    """The name of the track's My Tag in `category`, if it has one."""
+    from pyrekordbox.db6 import tables
+
+    parent = next(t for t in db.get_my_tag() if t.Name == category and t.ParentID == "root")
+    siblings = {t.ID: t.Name for t in db.get_my_tag() if t.ParentID == parent.ID}
+    for song in db.query(tables.DjmdSongMyTag).filter_by(ContentID=content.ID):
+        if song.MyTagID in siblings:
+            return siblings[song.MyTagID]
+    return None

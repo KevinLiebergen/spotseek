@@ -52,6 +52,10 @@ NOTIFY = os.environ.get("NOTIFY", "true").lower() not in ("0", "false", "no")
 # Don't download likes you already have somewhere in COPY_TO_DIR.
 SKIP_DUPLICATES = os.environ.get("SKIP_DUPLICATES", "true").lower() not in ("0", "false", "no")
 
+# Remove the comment tags of downloaded files ("Purchased at Beatport.com",
+# download sites' URLs) before they're copied, so rekordbox doesn't show them.
+STRIP_COMMENTS = os.environ.get("STRIP_COMMENTS", "true").lower() not in ("0", "false", "no")
+
 # Genre classification (see config/genres.example.yaml). Both keys are
 # optional: Discogs is queried anyway (more slowly without a token), and
 # Last.fm only with a key.

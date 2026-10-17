@@ -20,6 +20,7 @@ from . import (
     soundcloud_client,
     spotify_client,
     state,
+    tags,
     youtube_client,
 )
 
@@ -222,6 +223,10 @@ def process_track(track: dict) -> str:
     final_path = organizer.tidy_download(downloaded_path, artist, file_title)
 
     log.info("Downloaded -> %s", final_path)
+    if config.STRIP_COMMENTS:
+        removed = tags.strip_comments(final_path)
+        if removed:
+            log.info("Removed comments: %s", " / ".join(removed))
     # Record it before copying so a failed copy doesn't cause a re-download.
     state.mark_processed(spotify_id, title, artist, "ok")
 
