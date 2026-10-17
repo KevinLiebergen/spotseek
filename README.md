@@ -126,6 +126,11 @@ title) aren't downloaded again. A radio edit or extended mix counts as the
 same track; a remix you don't have yet doesn't. `SKIP_DUPLICATES=false`
 turns this off.
 
+Downloads often carry a comment saying where they came from ("Purchased
+at Beatport.com", a download site's URL), which rekordbox shows in its
+Comments column. They're removed from the file before it's copied;
+`STRIP_COMMENTS=false` keeps them.
+
 ## Downloading
 
 Soulseek only returns files whose path contains every word of the query,
@@ -264,6 +269,11 @@ open it. To preview or run the sync by hand:
 .venv\Scripts\python scripts\rekordbox_sync.py --dry-run
 .venv\Scripts\python scripts\rekordbox_sync.py
 ```
+
+To remove the comments of the tracks already in the collection, from the
+files and from rekordbox (with rekordbox closed; `[SAMPLER]` is left
+alone), run `scripts\clean_comments.py [--dry-run]`. A comment that is an
+energy note ("LOW", "MID", "HIGH") becomes the track's Energy My Tag.
 
 ## Known limitations
 
